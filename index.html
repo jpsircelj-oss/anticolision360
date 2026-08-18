@@ -1,429 +1,411 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-<meta name="theme-color" content="#05070a" />
-<title>AntiColisión 360 — V1</title>
-<style>
-  :root{
-    --bg:#05070a;
-    --panel:rgba(6,12,18,.56);
-    --line:rgba(255,255,255,.14);
-    --text:#f5f8fb;
-    --muted:#a8b5c2;
-    --ok:#48e29a;
-    --warn:#ffd166;
-    --danger:#ff5d73;
-    --accent:#6dd5ff;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-  #app{position:fixed;inset:0;background:#000}
-  #camera,#overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  #camera{background:#000}
-  #overlay{pointer-events:none}
-  .topbar{
-    position:absolute;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));
-    display:flex;justify-content:space-between;align-items:flex-start;gap:10px;z-index:5
-  }
-  .brand,.status,.chip,.control{
-    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-    background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.25)
-  }
-  .brand{padding:10px 12px;border-radius:16px;min-width:0}
-  .brand b{display:block;font-size:15px;letter-spacing:.2px}
-  .brand span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
-  .status{padding:8px 10px;border-radius:14px;font-size:12px;white-space:nowrap}
-  .status.ok{color:var(--ok)} .status.warn{color:var(--warn)} .status.danger{color:var(--danger)}
-  .leftRail{
-    position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:5;
-    display:flex;flex-direction:column;gap:8px
-  }
-  .chip{padding:9px 10px;border-radius:14px;min-width:92px}
-  .chip .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
-  .chip .v{font-weight:700;font-size:17px;margin-top:1px}
-  .bottom{
-    position:absolute;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:6;
-    display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end
-  }
-  .alertBox{padding:11px 12px;border-radius:16px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px)}
-  .alertBox .title{font-weight:800;font-size:13px}
-  .alertBox .msg{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
-  button{
-    appearance:none;border:1px solid var(--line);background:rgba(8,14,20,.78);color:#fff;
-    border-radius:16px;padding:12px 14px;font-weight:700;font-size:13px;min-height:46px
-  }
-  button:active{transform:scale(.98)}
-  #permission{
-    position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:22px;
-    background:radial-gradient(circle at 50% 35%,#122230 0,#070b10 45%,#000 100%)
-  }
-  .card{
-    width:min(520px,100%);background:rgba(8,14,20,.92);border:1px solid var(--line);border-radius:24px;
-    padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.45)
-  }
-  .card h1{font-size:22px;margin:0 0 8px}
-  .card p{color:var(--muted);font-size:14px;line-height:1.45;margin:0 0 14px}
-  .card button{width:100%;background:#0f6f9d}
-  .tiny{font-size:11px!important;margin-top:12px!important}
-  #debug{
-    position:absolute;right:12px;bottom:78px;z-index:9;max-width:min(72vw,420px);
-    font-size:10px;line-height:1.35;color:#cbd6df;background:rgba(0,0,0,.68);
-    border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:none;white-space:pre-wrap
-  }
-  .hidden{display:none!important}
-  @media (orientation:landscape){
-    .leftRail{top:auto;bottom:74px;transform:none;flex-direction:row}
-    .bottom{grid-template-columns:1fr auto auto}
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#05080d" />
+  <title>AntiColisión 360 — V2</title>
+  <style>
+    :root{
+      --bg:#05080d;
+      --panel:rgba(10,14,20,.76);
+      --line:rgba(255,255,255,.16);
+      --txt:#f5f7fb;
+      --muted:#aab3c2;
+      --ok:#49e6a5;
+      --cyan:#47c7f4;
+      --yellow:#ffd45a;
+      --danger:#ff5d6c;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--txt)}
+    body{overscroll-behavior:none}
+    #app{position:fixed;inset:0;background:#02050a}
+    video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    #video{background:#02050a}
+    #overlay{pointer-events:none}
+    .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.25),transparent 26%,transparent 68%,rgba(0,0,0,.34))}
+    .top{position:absolute;top:max(18px,env(safe-area-inset-top));left:18px;right:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .brand,.pill,.card,.bottomCard,.btn{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.22)}
+    .brand{border-radius:20px;padding:14px 18px}
+    .brand b{display:block;font-size:25px;line-height:1.05}
+    .brand span{display:block;color:var(--muted);font-size:14px;margin-top:7px}
+    .pill{border-radius:18px;padding:12px 16px;font-size:14px;white-space:nowrap}
+    .pill.ok{color:var(--ok)}
+    .pill.warn{color:var(--yellow)}
+    .stack{position:absolute;left:18px;top:44%;transform:translateY(-50%);display:grid;gap:10px;width:164px}
+    .card{border-radius:20px;padding:14px 16px}
+    .label{font-size:12px;letter-spacing:.09em;color:var(--muted);text-transform:uppercase}
+    .value{font-size:28px;font-weight:800;margin-top:3px}
+    .value.small{font-size:20px}
+    .value.ok{color:var(--ok)}
+    .value.warn{color:var(--yellow)}
+    .mini{font-size:12px;color:var(--muted);margin-top:4px}
+    .bottom{position:absolute;left:18px;right:18px;bottom:max(18px,env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end}
+    .bottomCard{border-radius:20px;padding:14px 16px;min-width:0}
+    .bottomCard b{display:block;font-size:16px;margin-bottom:4px}
+    .bottomCard span{font-size:13px;color:var(--muted);line-height:1.3}
+    .btn{appearance:none;border-radius:20px;color:#fff;padding:17px 18px;font-weight:750;font-size:15px;min-height:56px}
+    .btn:active{transform:scale(.98)}
+    #startScreen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:28px;background:radial-gradient(circle at 50% 25%,#0c1b2b 0,#05080d 48%,#020305 100%)}
+    .startBox{width:min(100%,620px);border:1px solid var(--line);border-radius:30px;padding:28px;background:rgba(7,12,18,.86)}
+    .startBox h1{font-size:30px;margin:0 0 8px}
+    .startBox p{color:var(--muted);line-height:1.5;margin:0 0 20px}
+    .startBox button{width:100%;border:0;border-radius:20px;background:#1783b6;color:#fff;padding:18px;font-size:18px;font-weight:800}
+    .startBox small{display:block;color:var(--muted);line-height:1.45;margin-top:16px}
+    #diag{position:absolute;inset:0;display:none;background:rgba(0,0,0,.78);padding:24px;z-index:10;overflow:auto}
+    #diagBox{max-width:680px;margin:40px auto;background:#0c1118;border:1px solid var(--line);border-radius:24px;padding:22px}
+    #diag pre{white-space:pre-wrap;word-break:break-word;color:#dbe5f2;font-size:13px;line-height:1.5}
+    #diag button{border:0;border-radius:16px;padding:14px 18px;font-weight:750}
+    @media(max-width:560px){
+      .top{left:14px;right:14px}
+      .brand b{font-size:22px}
+      .stack{left:14px;width:156px}
+      .bottom{left:14px;right:14px;grid-template-columns:1fr 1fr}
+      .bottomCard{grid-column:1/-1}
+      .btn{width:100%}
+    }
+  </style>
 </head>
 <body>
 <div id="app">
-  <video id="camera" playsinline autoplay muted></video>
+  <video id="video" autoplay playsinline muted></video>
   <canvas id="overlay"></canvas>
+  <div class="shade"></div>
 
-  <div class="topbar">
-    <div class="brand">
-      <b>AntiColisión 360</b>
-      <span>V1 • Cámara trasera + AR</span>
+  <div id="hud" style="display:none">
+    <div class="top">
+      <div class="brand">
+        <b>AntiColisión 360</b>
+        <span>V2 • Cámara + GPS + sensores</span>
+      </div>
+      <div id="cameraState" class="pill warn">Cámara iniciando…</div>
     </div>
-    <div id="camStatus" class="status warn">Cámara detenida</div>
-  </div>
 
-  <div class="leftRail">
-    <div class="chip"><div class="k">Velocidad</div><div class="v"><span id="speed">0</span> km/h</div></div>
-    <div class="chip"><div class="k">Riesgo</div><div class="v" id="risk">BAJO</div></div>
-    <div class="chip"><div class="k">Objeto</div><div class="v" id="object">—</div></div>
-  </div>
-
-  <div class="bottom">
-    <div class="alertBox">
-      <div class="title" id="alertTitle">Sistema listo</div>
-      <div class="msg" id="alertMsg">Activa la cámara trasera. La V1 muestra una capa AR de prueba sobre la imagen real.</div>
+    <div class="stack">
+      <div class="card">
+        <div class="label">Velocidad GPS</div>
+        <div id="speed" class="value">-- km/h</div>
+        <div id="speedSource" class="mini">esperando GPS</div>
+      </div>
+      <div class="card">
+        <div class="label">Rumbo</div>
+        <div id="heading" class="value small">--°</div>
+        <div id="accuracy" class="mini">precisión: -- m</div>
+      </div>
+      <div class="card">
+        <div class="label">Inclinación</div>
+        <div id="tilt" class="value small">--°</div>
+        <div id="motion" class="mini">sensor: esperando</div>
+      </div>
     </div>
-    <button id="switchBtn" type="button">Cambiar cámara</button>
-    <button id="debugBtn" type="button">Diagnóstico</button>
+
+    <div class="bottom">
+      <div class="bottomCard">
+        <b id="systemText">Sistema V2 activo</b>
+        <span id="statusText">La cámara es real. GPS y sensores se actualizan en vivo. V2 no inventa vehículos ni distancias.</span>
+      </div>
+      <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
+      <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
+    </div>
   </div>
 
-  <div id="debug"></div>
+  <div id="startScreen">
+    <div class="startBox">
+      <h1>AntiColisión 360 — V2</h1>
+      <p>Esta versión usa la cámara real del celular y agrega <b>velocidad por GPS</b>, <b>rumbo</b>, <b>orientación</b> y <b>movimiento</b> del teléfono.</p>
+      <button id="startBtn" type="button">ACTIVAR V2</button>
+      <small>Al tocar el botón, Android/Chrome puede pedir permisos de cámara y ubicación. Para una velocidad más precisa, probalo al aire libre y con GPS activado.</small>
+    </div>
+  </div>
 
-  <div id="permission">
-    <div class="card">
-      <h1>AntiColisión 360 — V1</h1>
-      <p>Esta versión intenta abrir primero la <b>cámara trasera</b> del celular y coloca la interfaz de realidad aumentada sobre la imagen real.</p>
-      <button id="startBtn" type="button">ACTIVAR CÁMARA TRASERA</button>
-      <p class="tiny">Importante: para que Android permita la cámara, abre esta página mediante <b>HTTPS</b> (por ejemplo GitHub Pages) y acepta el permiso de cámara cuando Chrome lo solicite.</p>
+  <div id="diag">
+    <div id="diagBox">
+      <h2>Diagnóstico V2</h2>
+      <pre id="diagText"></pre>
+      <button id="closeDiag" type="button">Cerrar</button>
     </div>
   </div>
 </div>
 
 <script>
 (() => {
-  "use strict";
-
-  const video = document.getElementById("camera");
-  const canvas = document.getElementById("overlay");
-  const ctx = canvas.getContext("2d");
-  const startBtn = document.getElementById("startBtn");
-  const switchBtn = document.getElementById("switchBtn");
-  const debugBtn = document.getElementById("debugBtn");
-  const permission = document.getElementById("permission");
-  const camStatus = document.getElementById("camStatus");
-  const debugBox = document.getElementById("debug");
-  const speedEl = document.getElementById("speed");
-  const riskEl = document.getElementById("risk");
-  const objectEl = document.getElementById("object");
-  const alertTitle = document.getElementById("alertTitle");
-  const alertMsg = document.getElementById("alertMsg");
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const startScreen = document.getElementById('startScreen');
+  const hud = document.getElementById('hud');
+  const cameraState = document.getElementById('cameraState');
+  const speedEl = document.getElementById('speed');
+  const speedSourceEl = document.getElementById('speedSource');
+  const headingEl = document.getElementById('heading');
+  const accuracyEl = document.getElementById('accuracy');
+  const tiltEl = document.getElementById('tilt');
+  const motionEl = document.getElementById('motion');
+  const statusText = document.getElementById('statusText');
 
   let stream = null;
-  let videoDevices = [];
-  let currentDeviceIndex = -1;
-  let lastError = "";
-  let demoT = 0;
+  let facingMode = 'environment';
+  let watchId = null;
+  let lastFix = null;
+  let gps = {lat:null, lon:null, speed:null, heading:null, accuracy:null, source:'-'};
+  let orient = {alpha:null, beta:null, gamma:null};
+  let motion = {x:null, y:null, z:null};
+  let cameraError = '';
+  let geoError = '';
+  let sensorError = '';
 
-  function log(msg) {
-    const now = new Date().toLocaleTimeString();
-    debugBox.textContent = `[${now}] ${msg}\n` + debugBox.textContent.slice(0, 1800);
-  }
-
-  function setStatus(text, kind="warn") {
-    camStatus.textContent = text;
-    camStatus.className = "status " + kind;
-  }
-
-  function stopStream() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      stream = null;
-    }
-  }
-
-  async function refreshDevices() {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      videoDevices = devices.filter(d => d.kind === "videoinput");
-      log("Cámaras detectadas: " + videoDevices.map((d,i) => `${i}: ${d.label || "sin nombre"}`).join(" | "));
-      return videoDevices;
-    } catch (e) {
-      log("No se pudieron enumerar cámaras: " + e.message);
-      return [];
-    }
-  }
-
-  function rearCandidates(devs) {
-    const rearWords = /back|rear|environment|trasera|posterior|camera 0|cámara 0/i;
-    const frontWords = /front|user|frontal|selfie/i;
-    return devs
-      .map((d, i) => ({d, i, score: (rearWords.test(d.label) ? 10 : 0) - (frontWords.test(d.label) ? 10 : 0)}))
-      .sort((a,b) => b.score - a.score);
-  }
-
-  async function openWithConstraints(constraints, label) {
-    stopStream();
-    log("Intentando: " + label);
-    const s = await navigator.mediaDevices.getUserMedia({video: constraints, audio:false});
-    stream = s;
-    video.srcObject = s;
-    await video.play();
-    const track = s.getVideoTracks()[0];
-    const settings = track.getSettings ? track.getSettings() : {};
-    log("Cámara activa: " + (track.label || "sin nombre") + " | " + JSON.stringify(settings));
-    setStatus("Cámara activa", "ok");
-    permission.classList.add("hidden");
-    await refreshDevices();
-
-    const activeId = settings.deviceId;
-    if (activeId) currentDeviceIndex = videoDevices.findIndex(d => d.deviceId === activeId);
-
-    return true;
-  }
-
-  async function startRearCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      lastError = "Este navegador no soporta acceso a cámara.";
-      setStatus("Sin acceso a cámara", "danger");
-      alertTitle.textContent = "Navegador no compatible";
-      alertMsg.textContent = lastError;
-      log(lastError);
-      return;
-    }
-
-    setStatus("Abriendo cámara…", "warn");
-    lastError = "";
-
-    // 1) Intento estricto: cámara trasera.
-    try {
-      await openWithConstraints({
-        facingMode: { exact: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      }, "facingMode exact environment");
-      return;
-    } catch (e) {
-      lastError = e.name + ": " + e.message;
-      log("Falló intento estricto: " + lastError);
-    }
-
-    // 2) Intento preferente: trasera, pero sin exigir.
-    try {
-      await openWithConstraints({
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      }, "facingMode ideal environment");
-      // Si abrió frontal, intentamos identificar una trasera por nombre.
-      await tryForceRearByDeviceLabel();
-      return;
-    } catch (e) {
-      lastError = e.name + ": " + e.message;
-      log("Falló intento preferente: " + lastError);
-    }
-
-    // 3) Último recurso: cualquier cámara para obtener permisos/labels.
-    try {
-      await openWithConstraints({width:{ideal:1280},height:{ideal:720}}, "cualquier cámara");
-      await tryForceRearByDeviceLabel();
-    } catch (e) {
-      lastError = e.name + ": " + e.message;
-      setStatus("Error de cámara", "danger");
-      alertTitle.textContent = "No se pudo abrir la cámara";
-      alertMsg.textContent = "Revisa el permiso de cámara de Chrome y que la página esté abierta por HTTPS.";
-      log("Error final: " + lastError);
-    }
-  }
-
-  async function tryForceRearByDeviceLabel() {
-    await refreshDevices();
-    const candidates = rearCandidates(videoDevices);
-    if (!candidates.length) return;
-
-    const currentTrack = stream && stream.getVideoTracks()[0];
-    const currentLabel = currentTrack ? currentTrack.label : "";
-    if (/back|rear|environment|trasera|posterior/i.test(currentLabel)) return;
-
-    const best = candidates[0];
-    if (best.score > 0 && best.d.deviceId) {
-      try {
-        await openWithConstraints({
-          deviceId: { exact: best.d.deviceId },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }, "deviceId trasero: " + (best.d.label || best.i));
-      } catch(e) {
-        log("No se pudo forzar por deviceId: " + e.message);
-      }
-    }
-  }
-
-  async function switchCamera() {
-    try {
-      await refreshDevices();
-      if (videoDevices.length < 2) {
-        log("Solo se detectó una cámara.");
-        return;
-      }
-      currentDeviceIndex = (currentDeviceIndex + 1 + videoDevices.length) % videoDevices.length;
-      const d = videoDevices[currentDeviceIndex];
-      await openWithConstraints({
-        deviceId: { exact: d.deviceId },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      }, "cambio manual: " + (d.label || currentDeviceIndex));
-    } catch(e) {
-      lastError = e.name + ": " + e.message;
-      log("Error cambiando cámara: " + lastError);
-    }
-  }
-
-  function resizeCanvas() {
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    const w = Math.floor(innerWidth * dpr);
-    const h = Math.floor(innerHeight * dpr);
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w; canvas.height = h;
-      canvas.style.width = innerWidth + "px";
-      canvas.style.height = innerHeight + "px";
-    }
+  function resizeCanvas(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(innerWidth*dpr);
+    canvas.height = Math.round(innerHeight*dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
+  addEventListener('resize', resizeCanvas);
+  resizeCanvas();
 
-  function drawAR() {
-    resizeCanvas();
-    const w = innerWidth, h = innerHeight;
-    ctx.clearRect(0,0,w,h);
-
-    // Suavísimo sombreado inferior para legibilidad.
-    const g = ctx.createLinearGradient(0,h*.55,0,h);
-    g.addColorStop(0,"rgba(0,0,0,0)");
-    g.addColorStop(1,"rgba(0,0,0,.25)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,w,h);
-
-    // Zona de carril proyectada (Argentina: circulación por derecha).
-    const horizonY = h * 0.46;
-    const nearY = h * 0.94;
-    const centerX = w * 0.50;
-    const nearHalf = Math.min(w * 0.34, 220);
-    const farHalf = Math.max(22, w * 0.055);
-
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(109,213,255,.76)";
-    ctx.setLineDash([12,10]);
-
-    ctx.beginPath();
-    ctx.moveTo(centerX - farHalf, horizonY);
-    ctx.lineTo(centerX - nearHalf, nearY);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(centerX + farHalf, horizonY);
-    ctx.lineTo(centerX + nearHalf, nearY);
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-
-    // Trayectoria central.
-    ctx.strokeStyle = "rgba(72,226,154,.80)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(centerX, horizonY + 12);
-    ctx.quadraticCurveTo(centerX - 8, h*.70, centerX, nearY);
-    ctx.stroke();
-
-    // Marcador de objeto demo, pequeño para no tapar visión.
-    demoT += 0.015;
-    const objY = h * (0.53 + 0.015*Math.sin(demoT));
-    const boxW = Math.max(58, w*.12);
-    const boxH = boxW*.52;
-    const objX = centerX - boxW/2;
-
-    ctx.strokeStyle = "rgba(255,209,102,.92)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(objX,objY,boxW,boxH);
-
-    ctx.fillStyle = "rgba(0,0,0,.58)";
-    ctx.fillRect(objX,objY-22,96,19);
-    ctx.fillStyle = "#ffd166";
-    ctx.font = "700 11px system-ui";
-    ctx.fillText("VEHÍCULO 42 m",objX+6,objY-8);
-
-    // Indicador de sobrepaso a la izquierda, como corresponde.
-    const ax = w*0.29, ay=h*0.59;
-    ctx.strokeStyle = "rgba(109,213,255,.65)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(centerX-18, h*.78);
-    ctx.quadraticCurveTo(ax, h*.70, ax, ay);
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(0,0,0,.55)";
-    ctx.fillRect(Math.max(10,ax-52),ay-24,104,21);
-    ctx.fillStyle = "#6dd5ff";
-    ctx.font = "700 10px system-ui";
-    ctx.fillText("PASO IZQUIERDA",Math.max(15,ax-47),ay-9);
-
-    requestAnimationFrame(drawAR);
+  function haversine(lat1, lon1, lat2, lon2){
+    const R=6371000, toRad=Math.PI/180;
+    const p1=lat1*toRad, p2=lat2*toRad;
+    const dp=(lat2-lat1)*toRad, dl=(lon2-lon1)*toRad;
+    const a=Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+    return 2*R*Math.asin(Math.sqrt(a));
   }
 
-  // Simulación visual básica de datos V1.
-  let fakeSpeed = 0;
-  setInterval(() => {
-    if (stream) fakeSpeed = Math.min(92, fakeSpeed + 2);
-    else fakeSpeed = Math.max(0, fakeSpeed - 4);
-    speedEl.textContent = fakeSpeed;
+  function bearing(lat1, lon1, lat2, lon2){
+    const r=Math.PI/180;
+    const p1=lat1*r,p2=lat2*r,dl=(lon2-lon1)*r;
+    const y=Math.sin(dl)*Math.cos(p2);
+    const x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+    return (Math.atan2(y,x)/r+360)%360;
+  }
 
-    if (fakeSpeed > 70) {
-      riskEl.textContent = "MEDIO";
-      riskEl.style.color = "#ffd166";
-      objectEl.textContent = "42 m";
-      alertTitle.textContent = "Vehículo detectado";
-      alertMsg.textContent = "V1 de interfaz: aviso visual de distancia y trayectoria. La detección automática real se integrará en la siguiente etapa.";
-    } else {
-      riskEl.textContent = "BAJO";
-      riskEl.style.color = "#48e29a";
-      objectEl.textContent = stream ? "—" : "—";
+  async function startCamera(){
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio:false,
+        video:{
+          facingMode:{ideal:facingMode},
+          width:{ideal:1920},
+          height:{ideal:1080}
+        }
+      });
+      video.srcObject = stream;
+      await video.play();
+      cameraState.textContent = facingMode === 'environment' ? 'Cámara trasera activa' : 'Cámara frontal activa';
+      cameraState.className = 'pill ok';
+      cameraError = '';
+    }catch(err){
+      cameraError = `${err.name}: ${err.message}`;
+      cameraState.textContent = 'Error de cámara';
+      cameraState.className = 'pill warn';
+      statusText.textContent = 'No se pudo abrir la cámara. Revisá el permiso de cámara en Chrome.';
     }
-  }, 700);
+  }
 
-  startBtn.addEventListener("click", startRearCamera);
-  switchBtn.addEventListener("click", switchCamera);
-  debugBtn.addEventListener("click", () => {
-    debugBox.style.display = debugBox.style.display === "block" ? "none" : "block";
-    log("URL segura: " + (window.isSecureContext ? "SÍ" : "NO") +
-        " | Protocolo: " + location.protocol +
-        " | UserAgent: " + navigator.userAgent);
+  function startGPS(){
+    if(!('geolocation' in navigator)){
+      geoError='Geolocalización no disponible';
+      return;
+    }
+    if(watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(pos=>{
+      const c=pos.coords;
+      let speedMS = Number.isFinite(c.speed) ? c.speed : null;
+      let source = speedMS !== null ? 'sensor GPS' : 'calculada';
+
+      if(speedMS === null && lastFix){
+        const dt=(pos.timestamp-lastFix.time)/1000;
+        if(dt>0.7 && dt<15){
+          const d=haversine(lastFix.lat,lastFix.lon,c.latitude,c.longitude);
+          const calc=d/dt;
+          if(calc < 80) speedMS=calc; // descarta saltos absurdos
+        }
+      }
+
+      let head = Number.isFinite(c.heading) ? c.heading : null;
+      if(head === null && lastFix){
+        const d=haversine(lastFix.lat,lastFix.lon,c.latitude,c.longitude);
+        if(d>3) head=bearing(lastFix.lat,lastFix.lon,c.latitude,c.longitude);
+      }
+
+      gps = {
+        lat:c.latitude,
+        lon:c.longitude,
+        speed:speedMS,
+        heading:head,
+        accuracy:Number.isFinite(c.accuracy)?c.accuracy:null,
+        source
+      };
+      lastFix={lat:c.latitude,lon:c.longitude,time:pos.timestamp};
+      updateHUD();
+      geoError='';
+    }, err=>{
+      geoError=`${err.code}: ${err.message}`;
+      speedSourceEl.textContent='sin permiso o sin señal GPS';
+    },{
+      enableHighAccuracy:true,
+      maximumAge:500,
+      timeout:15000
+    });
+  }
+
+  async function requestSensorPermissionIfNeeded(){
+    try{
+      if(typeof DeviceOrientationEvent !== 'undefined' &&
+         typeof DeviceOrientationEvent.requestPermission === 'function'){
+        const r=await DeviceOrientationEvent.requestPermission();
+        if(r!=='granted') throw new Error('Permiso de orientación rechazado');
+      }
+      if(typeof DeviceMotionEvent !== 'undefined' &&
+         typeof DeviceMotionEvent.requestPermission === 'function'){
+        const r=await DeviceMotionEvent.requestPermission();
+        if(r!=='granted') throw new Error('Permiso de movimiento rechazado');
+      }
+      sensorError='';
+    }catch(e){
+      sensorError=e.message;
+    }
+  }
+
+  function startSensors(){
+    addEventListener('deviceorientation', e=>{
+      orient.alpha = Number.isFinite(e.alpha) ? e.alpha : orient.alpha;
+      orient.beta = Number.isFinite(e.beta) ? e.beta : orient.beta;
+      orient.gamma = Number.isFinite(e.gamma) ? e.gamma : orient.gamma;
+      updateHUD();
+    }, true);
+
+    addEventListener('devicemotion', e=>{
+      const a=e.accelerationIncludingGravity || e.acceleration;
+      if(a){
+        motion.x=Number.isFinite(a.x)?a.x:motion.x;
+        motion.y=Number.isFinite(a.y)?a.y:motion.y;
+        motion.z=Number.isFinite(a.z)?a.z:motion.z;
+      }
+      updateHUD();
+    }, true);
+  }
+
+  function updateHUD(){
+    if(Number.isFinite(gps.speed)){
+      const kmh=Math.max(0,gps.speed*3.6);
+      speedEl.textContent=`${kmh.toFixed(kmh<10?1:0)} km/h`;
+      speedSourceEl.textContent=gps.source;
+    }else{
+      speedEl.textContent='-- km/h';
+      speedSourceEl.textContent='esperando GPS';
+    }
+
+    const h = Number.isFinite(gps.heading) ? gps.heading :
+              Number.isFinite(orient.alpha) ? (360-orient.alpha)%360 : null;
+    headingEl.textContent = Number.isFinite(h) ? `${Math.round(h)}°` : '--°';
+    accuracyEl.textContent = Number.isFinite(gps.accuracy) ? `precisión: ±${Math.round(gps.accuracy)} m` : 'precisión: -- m';
+
+    tiltEl.textContent = Number.isFinite(orient.beta) ? `${Math.round(orient.beta)}°` : '--°';
+    if([motion.x,motion.y,motion.z].some(Number.isFinite)){
+      const mag=Math.sqrt((motion.x||0)**2+(motion.y||0)**2+(motion.z||0)**2);
+      motionEl.textContent=`movimiento: ${mag.toFixed(1)} m/s²`;
+    }else{
+      motionEl.textContent='sensor: esperando';
+    }
+  }
+
+  function draw(){
+    const w=innerWidth,h=innerHeight;
+    ctx.clearRect(0,0,w,h);
+
+    // Retícula AR: referencia visual, no detección de objetos.
+    const beta=Number.isFinite(orient.beta)?orient.beta:0;
+    const gamma=Number.isFinite(orient.gamma)?orient.gamma:0;
+    const cx=w/2 + Math.max(-w*.14,Math.min(w*.14,gamma*2.0));
+    const horizon=h*.52 + Math.max(-h*.12,Math.min(h*.12,(beta-70)*2.0));
+
+    ctx.save();
+    ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(73,230,165,.9)';
+    ctx.beginPath();
+    ctx.moveTo(cx,h*.47);
+    ctx.lineTo(cx,h*.86);
+    ctx.stroke();
+
+    ctx.strokeStyle='rgba(71,199,244,.78)';
+    ctx.setLineDash([14,16]);
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(w*.31,h*.88); ctx.lineTo(cx-w*.08,horizon);
+    ctx.moveTo(w*.69,h*.88); ctx.lineTo(cx+w*.08,horizon);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle='rgba(255,255,255,.58)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(cx-38,horizon); ctx.lineTo(cx+38,horizon);
+    ctx.moveTo(cx,horizon-12); ctx.lineTo(cx,horizon+12);
+    ctx.stroke();
+
+    // Etiqueta explícita para no confundir con detección real.
+    const label='AR de orientación • V2';
+    ctx.font='600 13px system-ui';
+    const tw=ctx.measureText(label).width;
+    const x=Math.max(12,Math.min(w-tw-28,cx-tw/2));
+    const y=Math.max(125,horizon-34);
+    ctx.fillStyle='rgba(7,12,18,.76)';
+    ctx.fillRect(x-10,y-18,tw+20,28);
+    ctx.fillStyle='rgba(255,255,255,.9)';
+    ctx.fillText(label,x,y);
+
+    ctx.restore();
+    requestAnimationFrame(draw);
+  }
+
+  async function startAll(){
+    startScreen.style.display='none';
+    hud.style.display='block';
+    await requestSensorPermissionIfNeeded();
+    await startCamera();
+    startGPS();
+    startSensors();
+    draw();
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startAll);
+
+  document.getElementById('switchCamera').addEventListener('click', async()=>{
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    await startCamera();
   });
 
-  window.addEventListener("orientationchange", resizeCanvas);
-  window.addEventListener("resize", resizeCanvas);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) log("App pasó a segundo plano.");
+  document.getElementById('diagnostic').addEventListener('click', ()=>{
+    const info={
+      version:'AntiColisión 360 V2',
+      secureContext:window.isSecureContext,
+      url:location.href,
+      cameraFacing:facingMode,
+      cameraTracks:stream ? stream.getVideoTracks().map(t=>({label:t.label,readyState:t.readyState,settings:t.getSettings()})) : [],
+      gps,
+      orientation:orient,
+      motion,
+      cameraError,
+      geoError,
+      sensorError,
+      userAgent:navigator.userAgent
+    };
+    document.getElementById('diagText').textContent=JSON.stringify(info,null,2);
+    document.getElementById('diag').style.display='block';
   });
 
-  drawAR();
+  document.getElementById('closeDiag').addEventListener('click',()=>{
+    document.getElementById('diag').style.display='none';
+  });
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible' && stream){
+      video.play().catch(()=>{});
+    }
+  });
 })();
 </script>
 </body>
