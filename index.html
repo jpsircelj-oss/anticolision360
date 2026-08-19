@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V4.1</title>
+  <title>AntiColisión 360 — V4.2</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -126,7 +126,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V4.1</span>
+        <span>V4.2</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -159,8 +159,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V4.1 activo</b>
-        <span id="statusText">V4.1: cámara trasera reforzada + líneas blancas +50% en grosor y +40% en visibilidad. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V4.2 activo</b>
+        <span id="statusText">V4.2: cámara trasera reforzada + bordes laterales continuos, más blancos y más gruesos. Las líneas discontinuas quedan reservadas para separación de carriles. La distancia física en metros todavía no se calcula.</span>
       </div>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
       <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
@@ -169,9 +169,9 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V4.1</h1>
+      <h1>AntiColisión 360 — V4.2</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V4.1</button>
+      <button id="startBtn" type="button">ACTIVAR V4.2</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
@@ -186,7 +186,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V4.1</h2>
+      <h2>Diagnóstico V4.2</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -511,7 +511,7 @@
     cameraError=lastErr ? `${lastErr.name || 'Error'}: ${lastErr.message || lastErr}` : 'No se encontró una cámara disponible';
     cameraState.textContent='CAM ✕';
     cameraState.className='pill glass danger';
-    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.1.';
+    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.2.';
   }
 
   function startGPS(){
@@ -735,24 +735,48 @@
   }
 
   function drawRoadGuide(sw,sh,cx,horizon){
-    // V4: guías blancas reforzadas.
-    // Grosor: 1.4 -> 2.1 (+50%). Opacidad: .20 -> .28 (+40%).
+    // V4.2: bordes de calzada continuos y claramente visibles.
+    // Se dibuja un halo suave y un núcleo blanco para que el borde se vea
+    // sobre asfalto claro u oscuro sin convertir la interfaz en un videojuego.
     // La posición continúa compensándose con la inclinación/orientación del teléfono.
     ctx.save();
-    ctx.strokeStyle='rgba(255,255,255,.28)';
-    ctx.lineWidth=2.1;
     ctx.lineCap='round';
     ctx.lineJoin='round';
-    ctx.setLineDash([9,16]);
+    ctx.setLineDash([]);
 
+    const leftNearX=sw*.32, rightNearX=sw*.68;
+    const leftFarX=cx-sw*.060, rightFarX=cx+sw*.060;
+
+    // Halo exterior: mejora contraste sin tapar la imagen real.
+    ctx.strokeStyle='rgba(255,255,255,.18)';
+    ctx.lineWidth=6.2;
     ctx.beginPath();
-    ctx.moveTo(sw*.34,sh*.88); ctx.lineTo(cx-sw*.055,horizon);
-    ctx.moveTo(sw*.66,sh*.88); ctx.lineTo(cx+sw*.055,horizon);
+    ctx.moveTo(leftNearX,sh*.90); ctx.lineTo(leftFarX,horizon);
+    ctx.moveTo(rightNearX,sh*.90); ctx.lineTo(rightFarX,horizon);
+    ctx.stroke();
+
+    // Línea principal: blanca, continua y aproximadamente 50% más gruesa
+    // que la V4.1 (2.1 px -> 3.2 px).
+    ctx.strokeStyle='rgba(255,255,255,.72)';
+    ctx.lineWidth=3.2;
+    ctx.beginPath();
+    ctx.moveTo(leftNearX,sh*.90); ctx.lineTo(leftFarX,horizon);
+    ctx.moveTo(rightNearX,sh*.90); ctx.lineTo(rightFarX,horizon);
+    ctx.stroke();
+
+    // Referencia central discontinua MUY tenue: sólo sugiere separación de carril.
+    // No pretende afirmar que exista una línea pintada real en la calle.
+    ctx.strokeStyle='rgba(255,255,255,.24)';
+    ctx.lineWidth=1.8;
+    ctx.setLineDash([10,18]);
+    ctx.beginPath();
+    ctx.moveTo(cx,sh*.86);
+    ctx.lineTo(cx,horizon+Math.max(8,sh*.015));
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Las flechas se mantienen suaves para no tapar la escena.
-    ctx.fillStyle='rgba(255,255,255,.16)';
+    // Flechas discretas para mostrar el sentido de circulación.
+    ctx.fillStyle='rgba(255,255,255,.22)';
     const arrow = (x,y,s)=>{
       ctx.beginPath();
       ctx.moveTo(x,y-s);
@@ -848,7 +872,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V4.1 — selección de cámara trasera por deviceId',
+      version:'AntiColisión 360 V4.2 — cámara trasera + bordes continuos reforzados',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
