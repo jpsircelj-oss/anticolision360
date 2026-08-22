@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V4.5</title>
+  <title>AntiColisión 360 — V4.8</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -127,7 +127,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V4.5</span>
+        <span>V4.8</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -161,8 +161,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V4.5 activo</b>
-        <span id="statusText">V4.5: alertas sonoras de riesgo, cámara trasera y bordes de calzada estabilizados. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V4.8 activo</b>
+        <span id="statusText">V4.8: cámara trasera reforzada, audio aumentado y bordes reales de calzada. La distancia física en metros todavía no se calcula.</span>
       </div>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
       <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
@@ -171,17 +171,17 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V4.5</h1>
+      <h1>AntiColisión 360 — V4.8</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V4.5 CON AUDIO</button>
+      <button id="startBtn" type="button">ACTIVAR V4.8 CON AUDIO</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
         ✓ Velocidad GPS y rumbo<br>
-        ✓ Bordes de calzada adaptados a la imagen real<br>
+        ✓ Bordes visibles únicamente cuando se reconoce la calzada<br>
         ✓ Detección limpia con esquinas de color<br>
         ✓ Verde / amarillo / rojo según prioridad visual<br>
-        ✓ Alertas sonoras según el nivel de riesgo<br>
+        ✓ Alertas sonoras 150 % más fuertes según el riesgo<br>
         ✓ Animales incluidos<br>
         ✓ Sin inventar metros ni vehículos
       </div>
@@ -190,7 +190,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V4.5</h2>
+      <h2>Diagnóstico V4.8</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -271,7 +271,8 @@
     oscillator.type='sine';
     oscillator.frequency.setValueAtTime(frequency,start);
     gain.gain.setValueAtTime(0.0001,start);
-    gain.gain.exponentialRampToValueAtTime(volume,start+0.012);
+    // +150 % respecto del nivel original; el límite evita distorsión.
+    gain.gain.exponentialRampToValueAtTime(Math.min(volume*2.5,0.95),start+0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001,start+duration);
     oscillator.connect(gain);
     gain.connect(audioContext.destination);
@@ -418,7 +419,7 @@
 
     // Después de conceder permiso los nombres suelen aparecer. Si vemos una
     // cámara trasera/frontal explícita distinta de la abierta, la forzamos por deviceId.
-    if(allowReopen && preferred?.deviceId && preferred.deviceId!==settings.deviceId){
+    if(allowReopen && reportedFacing!==wanted && preferred?.deviceId && preferred.deviceId!==settings.deviceId){
       const preferredFacing=deviceFacingFromText(preferred.label);
       if(preferredFacing===wanted || (wanted==='environment' && rearScore(preferred)>=100) || (wanted==='user' && frontScore(preferred)>=100)){
         candidate.getTracks().forEach(t=>t.stop());
@@ -438,8 +439,23 @@
 
     stopCameraStream();
     stream=candidate;
+    video.muted=true;
+    video.autoplay=true;
+    video.playsInline=true;
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
     video.srcObject=stream;
-    await video.play();
+    try{
+      await video.play();
+    }catch(err){
+      cameraLog(`Primer inicio de video: ${err.name || 'Error'}: ${err.message || err}`);
+      await new Promise(resolve=>{
+        if(video.readyState>=1){resolve();return;}
+        video.addEventListener('loadedmetadata',resolve,{once:true});
+        setTimeout(resolve,1200);
+      });
+      await video.play();
+    }
 
     facingMode=reportedFacing || wanted;
     video.style.transform=facingMode==='user' ? 'scaleX(-1)' : 'none';
@@ -505,12 +521,11 @@
 
     let lastErr=null;
 
-    // 1) Chrome/Android: pedir explícitamente la orientación deseada.
+    // 1) Android: pedir la orientación sin imponer resolución. Algunos Xiaomi y
+    // Honor rechazan la cámara trasera si se combina con 1920x1080 al inicio.
     try{
       await openCameraConstraints({
-        facingMode:{exact:wanted},
-        width:{ideal:1920},
-        height:{ideal:1080}
+        facingMode:{exact:wanted}
       },wanted,`facingMode exact ${wanted}`,{allowAmbiguous:true,allowReopen:true});
       return;
     }catch(err){
@@ -577,7 +592,7 @@
     cameraError=lastErr ? `${lastErr.name || 'Error'}: ${lastErr.message || lastErr}` : 'No se encontró una cámara disponible';
     cameraState.textContent='CAM ✕';
     cameraState.className='pill glass danger';
-    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.5.';
+    statusText.textContent='No se pudo abrir la cámara. Abrí la página HTTPS en Chrome y revisá el permiso de cámara.';
   }
 
   function startGPS(){
@@ -800,120 +815,157 @@
     ctx.restore();
   }
 
-  // Analiza una copia pequeña de la imagen para seguir contrastes del pavimento.
-  // Es una ayuda visual: no sustituye sensores ni confirma bordes reales.
+  // Reconoce parejas de bordes compatibles con una calzada en perspectiva.
+  // Si la evidencia es insuficiente no inventa líneas, carriles ni flechas.
+  const PROBE_WIDTH=192, PROBE_HEIGHT=112;
+  const ROAD_ROWS=[.88,.78,.68,.59];
+  const ROAD_CONFIDENCE=.56;
   const roadProbe=document.createElement('canvas');
-  roadProbe.width=120;
-  roadProbe.height=72;
+  roadProbe.width=PROBE_WIDTH;
+  roadProbe.height=PROBE_HEIGHT;
   const roadProbeCtx=roadProbe.getContext('2d',{willReadFrequently:true});
-  let roadEdges={left:null,right:null,confidence:0,lastAt:0};
+  let roadEdges={left:null,right:null,confidence:0,lastAt:0,stableFrames:0};
   let smoothedOrientation={cx:null,horizon:null};
 
   function updateRoadEdges(sw,sh){
     const now=performance.now();
-    if(!stream || video.readyState<2 || !roadProbeCtx || now-roadEdges.lastAt<190) return;
+    if(!stream || video.readyState<2 || !roadProbeCtx || now-roadEdges.lastAt<150) return;
     roadEdges.lastAt=now;
+
+    const loseRoad=()=>{
+      roadEdges.confidence*=.68;
+      roadEdges.stableFrames=Math.max(0,roadEdges.stableFrames-1);
+      if(roadEdges.confidence<.16){
+        roadEdges.left=null;
+        roadEdges.right=null;
+        roadEdges.stableFrames=0;
+      }
+    };
+
     try{
       const vw=video.videoWidth||1280,vh=video.videoHeight||720;
       const scale=Math.max(sw/vw,sh/vh);
       const cropW=sw/scale,cropH=sh/scale;
-      roadProbeCtx.drawImage(video,(vw-cropW)/2,(vh-cropH)/2,cropW,cropH,0,0,120,72);
-      const pixels=roadProbeCtx.getImageData(0,0,120,72).data;
+      roadProbeCtx.drawImage(video,(vw-cropW)/2,(vh-cropH)/2,cropW,cropH,0,0,PROBE_WIDTH,PROBE_HEIGHT);
+      const pixels=roadProbeCtx.getImageData(0,0,PROBE_WIDTH,PROBE_HEIGHT).data;
       const luma=(x,y)=>{
-        const i=(y*120+x)*4;
+        const i=(Math.max(0,Math.min(PROBE_HEIGHT-1,y))*PROBE_WIDTH+Math.max(0,Math.min(PROBE_WIDTH-1,x)))*4;
         return pixels[i]*.299+pixels[i+1]*.587+pixels[i+2]*.114;
       };
-      const findEdge=(y,start,end,preferred)=>{
-        let bestX=preferred,bestScore=0;
-        for(let x=start;x<=end;x++){
-          const contrast=Math.abs(luma(x-3,y)-luma(x+3,y));
-          const continuity=Math.abs(luma(x-2,Math.max(0,y-2))-luma(x+2,Math.max(0,y-2)));
-          const distancePenalty=Math.abs(x-preferred)*.55;
-          const score=contrast+continuity*.42-distancePenalty;
-          if(score>bestScore){bestScore=score;bestX=x;}
+
+      const findEdge=(y,minX,maxX,expectedX)=>{
+        let winner=null;
+        for(let x=minX;x<=maxX;x++){
+          const center=luma(x+3,y)-luma(x-3,y);
+          const above=luma(x+3,y-2)-luma(x-3,y-2);
+          const below=luma(x+3,y+2)-luma(x-3,y+2);
+          const continuity=(Math.abs(center)+Math.abs(above)+Math.abs(below))/3;
+          const sameDirection=(Math.sign(center)===Math.sign(above)?1:0)+(Math.sign(center)===Math.sign(below)?1:0);
+          if(continuity<19 || sameDirection<1) continue;
+          const score=continuity+sameDirection*7-Math.abs(x-expectedX)*.46;
+          if(!winner || score>winner.score) winner={x:x/PROBE_WIDTH,score,contrast:continuity};
         }
-        return {x:bestX/120,score:bestScore};
+        return winner;
       };
-      const leftNear=findEdge(61,10,56,37);
-      const leftMid=findEdge(49,18,58,45);
-      const rightNear=findEdge(61,64,109,83);
-      const rightMid=findEdge(49,62,102,75);
-      const confidence=Math.min(1,(leftNear.score+leftMid.score+rightNear.score+rightMid.score)/190);
-      if(confidence<.20){roadEdges.confidence*=.85;return;}
-      const blend=.16;
-      const smooth=(old,value)=>old===null?value:old*(1-blend)+value*blend;
-      const left={near:leftNear.x,mid:leftMid.x};
-      const right={near:rightNear.x,mid:rightMid.x};
-      roadEdges.left=roadEdges.left?{near:smooth(roadEdges.left.near,left.near),mid:smooth(roadEdges.left.mid,left.mid)}:left;
-      roadEdges.right=roadEdges.right?{near:smooth(roadEdges.right.near,right.near),mid:smooth(roadEdges.right.mid,right.mid)}:right;
-      roadEdges.confidence=smooth(roadEdges.confidence,confidence);
-    }catch(_){roadEdges.confidence*=.9;}
+
+      const left=[],right=[];
+      for(let row=0;row<ROAD_ROWS.length;row++){
+        const y=Math.round(PROBE_HEIGHT*ROAD_ROWS[row]);
+        const narrowing=row*.048;
+        const previousLeft=roadEdges.left?.points?.[row]?.x;
+        const previousRight=roadEdges.right?.points?.[row]?.x;
+        const leftEdge=findEdge(y,9,90,Math.round(PROBE_WIDTH*(previousLeft??(.25+narrowing))));
+        const rightEdge=findEdge(y,102,182,Math.round(PROBE_WIDTH*(previousRight??(.75-narrowing))));
+        if(!leftEdge || !rightEdge){loseRoad();return;}
+        left.push({...leftEdge,y:ROAD_ROWS[row]});
+        right.push({...rightEdge,y:ROAD_ROWS[row]});
+      }
+
+      const widths=left.map((edge,i)=>right[i].x-edge.x);
+      const centers=left.map((edge,i)=>(edge.x+right[i].x)/2);
+      const perspectiveSteps=widths.slice(1).filter((width,i)=>width<=widths[i]+.045).length;
+      const leftSteps=left.slice(1).filter((edge,i)=>edge.x>=left[i].x-.038).length;
+      const rightSteps=right.slice(1).filter((edge,i)=>edge.x<=right[i].x+.038).length;
+      const convergence=widths[0]-widths[widths.length-1];
+      const centerDrift=Math.max(...centers)-Math.min(...centers);
+      if(widths[0]<.28 || widths[0]>.92 || widths[3]<.12 || convergence<.055 ||
+         perspectiveSteps<2 || leftSteps<2 || rightSteps<2 || centerDrift>.15){
+        loseRoad();return;
+      }
+
+      // El asfalto dentro de los bordes debe ser razonablemente continuo.
+      let surfaceVariation=0,surfaceSamples=0;
+      for(let row=0;row<ROAD_ROWS.length;row++){
+        const y=Math.round(PROBE_HEIGHT*ROAD_ROWS[row]);
+        const x1=Math.round(PROBE_WIDTH*(left[row].x*.35+right[row].x*.65));
+        const x2=Math.round(PROBE_WIDTH*(left[row].x*.65+right[row].x*.35));
+        surfaceVariation+=Math.abs(luma(x1,y)-luma(x2,y));
+        surfaceSamples++;
+      }
+      const averageContrast=[...left,...right].reduce((sum,edge)=>sum+edge.contrast,0)/8;
+      const surfacePenalty=Math.min(.34,(surfaceVariation/surfaceSamples)/240);
+      const confidence=Math.max(0,Math.min(1,averageContrast/88+convergence*.75-surfacePenalty));
+      if(confidence<ROAD_CONFIDENCE){loseRoad();return;}
+
+      const blend=.32;
+      const smoothPoints=(previous,current)=>current.map((point,index)=>({
+        x:previous?.points?.[index]?previous.points[index].x*(1-blend)+point.x*blend:point.x,
+        y:point.y
+      }));
+      const leftPoints=smoothPoints(roadEdges.left,left);
+      const rightPoints=smoothPoints(roadEdges.right,right);
+      roadEdges.left={near:leftPoints[0].x,mid:leftPoints[2].x,points:leftPoints};
+      roadEdges.right={near:rightPoints[0].x,mid:rightPoints[2].x,points:rightPoints};
+      roadEdges.confidence=roadEdges.stableFrames?roadEdges.confidence*.58+confidence*.42:confidence;
+      roadEdges.stableFrames=Math.min(12,roadEdges.stableFrames+1);
+    }catch(_){loseRoad();}
   }
 
   function drawRoadGuide(sw,sh,cx,horizon){
-    // V4.4: bordes de calzada continuos y claramente visibles.
-    // Se dibuja un halo suave y un núcleo blanco para que el borde se vea
-    // sobre asfalto claro u oscuro sin convertir la interfaz en un videojuego.
-    // La posición continúa compensándose con la inclinación/orientación del teléfono.
+    updateRoadEdges(sw,sh);
+    if(roadEdges.confidence<ROAD_CONFIDENCE || roadEdges.stableFrames<3 ||
+       !roadEdges.left?.points || !roadEdges.right?.points) return;
+
     ctx.save();
     ctx.lineCap='round';
     ctx.lineJoin='round';
     ctx.setLineDash([]);
 
-    updateRoadEdges(sw,sh);
-    const adaptive=roadEdges.confidence>.24 && roadEdges.left && roadEdges.right;
-    const leftNearX=sw*(adaptive?roadEdges.left.near:.32);
-    const rightNearX=sw*(adaptive?roadEdges.right.near:.68);
-    const leftMidX=sw*(adaptive?roadEdges.left.mid:.39);
-    const rightMidX=sw*(adaptive?roadEdges.right.mid:.61);
-    const leftFarX=cx-sw*.060, rightFarX=cx+sw*.060;
+    const traceSide=points=>{
+      ctx.moveTo(points[0].x*sw,points[0].y*sh);
+      for(let index=1;index<points.length-1;index++){
+        const current=points[index],next=points[index+1];
+        ctx.quadraticCurveTo(current.x*sw,current.y*sh,
+          (current.x+next.x)*.5*sw,(current.y+next.y)*.5*sh);
+      }
+      const last=points[points.length-1];
+      ctx.lineTo(last.x*sw,last.y*sh);
+    };
     const traceEdges=()=>{
       ctx.beginPath();
-      ctx.moveTo(leftNearX,sh*.90);
-      ctx.quadraticCurveTo(leftMidX,sh*.68,leftFarX,horizon);
-      ctx.moveTo(rightNearX,sh*.90);
-      ctx.quadraticCurveTo(rightMidX,sh*.68,rightFarX,horizon);
+      traceSide(roadEdges.left.points);
+      traceSide(roadEdges.right.points);
       ctx.stroke();
     };
 
-    // Halo exterior: mejora contraste sin tapar la imagen real.
-    ctx.strokeStyle='rgba(255,255,255,.24)';
-    ctx.lineWidth=7.4;
+    ctx.strokeStyle='rgba(255,255,255,.27)';
+    ctx.lineWidth=8;
+    traceEdges();
+    ctx.strokeStyle='rgba(255,255,255,.94)';
+    ctx.lineWidth=4.1;
     traceEdges();
 
-    // Línea principal: blanca, continua y aproximadamente 50% más gruesa
-    // que la V4.1 (2.1 px -> 3.2 px).
-    ctx.strokeStyle='rgba(255,255,255,.86)';
-    ctx.lineWidth=3.8;
-    traceEdges();
-
-    // Referencia central discontinua MUY tenue: sólo sugiere separación de carril.
-    // No pretende afirmar que exista una línea pintada real en la calle.
-    ctx.strokeStyle='rgba(255,255,255,.24)';
-    ctx.lineWidth=1.8;
-    ctx.setLineDash([10,18]);
+    // La guía central sólo se muestra entre bordes realmente identificados.
+    const centerPoints=roadEdges.left.points.map((point,index)=>({
+      x:(point.x+roadEdges.right.points[index].x)/2,
+      y:point.y
+    }));
+    ctx.strokeStyle='rgba(255,255,255,.19)';
+    ctx.lineWidth=1.6;
+    ctx.setLineDash([9,19]);
     ctx.beginPath();
-    ctx.moveTo(cx,sh*.86);
-    ctx.lineTo(cx,horizon+Math.max(8,sh*.015));
+    traceSide(centerPoints);
     ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Flechas discretas para mostrar el sentido de circulación.
-    ctx.fillStyle='rgba(255,255,255,.22)';
-    const arrow = (x,y,s)=>{
-      ctx.beginPath();
-      ctx.moveTo(x,y-s);
-      ctx.lineTo(x-s*.42,y-s*.42);
-      ctx.lineTo(x-s*.16,y-s*.42);
-      ctx.lineTo(x-s*.16,y+s*.35);
-      ctx.lineTo(x+s*.16,y+s*.35);
-      ctx.lineTo(x+s*.16,y-s*.42);
-      ctx.lineTo(x+s*.42,y-s*.42);
-      ctx.closePath();
-      ctx.fill();
-    };
-    arrow(cx,sh*.76,15);
-    arrow(cx,sh*.64,10);
     ctx.restore();
   }
 
@@ -981,14 +1033,35 @@
   }
 
   async function startAll(){
-    // Android sólo habilita Web Audio cuando se inicia desde un toque real.
-    await activateAudio();
+    // Un HTML descargado no puede habilitar la cámara: Chrome exige HTTPS.
+    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
+      const secureUrl='https://jpsircelj-oss.github.io/anticolision360/';
+      const message='La cámara trasera solo funciona desde la página segura de AntiColisión 360. Abrí la versión publicada en Chrome.';
+      const description=startScreen.querySelector('.startBox p');
+      description.textContent=message;
+      description.style.color='#ffd35a';
+      const startBtn=document.getElementById('startBtn');
+      startBtn.textContent='ABRIR PÁGINA SEGURA';
+      startBtn.onclick=()=>{window.location.href=secureUrl;};
+      return;
+    }
+
+    // Solicitar cámara y audio inmediatamente después del toque real evita
+    // que Android pierda el gesto por permisos de sensores intermedios.
+    facingMode='environment';
+    const audioActivation=activateAudio();
     updateSoundButton();
     startScreen.style.display='none';
     hud.style.display='block';
-    await requestSensorPermissionIfNeeded();
-    startSensors();
     await startCamera();
+    await audioActivation;
+    updateSoundButton();
+    try{
+      await requestSensorPermissionIfNeeded();
+      startSensors();
+    }catch(err){
+      sensorError=`${err.name || 'Error'}: ${err.message || err}`;
+    }
     startGPS();
     draw();
     loadAI();
@@ -1018,7 +1091,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V4.5 — alertas sonoras + cámara trasera + bordes adaptativos estabilizados',
+      version:'AntiColisión 360 V4.8 — cámara trasera reforzada + audio 150 % + bordes reales',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
@@ -1030,7 +1103,7 @@
       gps,
       orientation:orient,
       audio:{enabled:audioEnabled,state:audioContext?.state||'sin iniciar',lastAlertLevel:lastAudioLevel},
-      roadGuide:{adaptive:roadEdges.confidence>.24,confidence:+roadEdges.confidence.toFixed(2),left:roadEdges.left,right:roadEdges.right},
+      roadGuide:{adaptive:roadEdges.confidence>=ROAD_CONFIDENCE && roadEdges.stableFrames>=3,confidence:+roadEdges.confidence.toFixed(2),stableFrames:roadEdges.stableFrames,left:roadEdges.left,right:roadEdges.right},
       ai:{
         loaded:!!model,
         tfVersion:typeof tf!=='undefined'?tf.version.tfjs:null,
