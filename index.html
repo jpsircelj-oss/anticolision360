@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V4.4</title>
+  <title>AntiColisión 360 — V4.5</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -44,6 +44,7 @@
     .brand b{font-size:12px;line-height:1}
     .brand span{font-size:9px;color:rgba(255,255,255,.58);margin:0}
     .states{display:flex;align-items:center;gap:5px}
+    .states button{appearance:none;font:inherit;pointer-events:auto;cursor:pointer}
     .pill{
       border-radius:999px;padding:5px 7px;font-size:9px;white-space:nowrap;
       background:rgba(5,9,14,.48);border:1px solid rgba(255,255,255,.11);
@@ -126,11 +127,12 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V4.4</span>
+        <span>V4.5</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
         <div id="aiState" class="pill glass warn">IA…</div>
+        <button id="soundToggle" class="pill glass ok" type="button" aria-label="Silenciar alertas sonoras">🔊 AUDIO</button>
       </div>
     </div>
 
@@ -159,8 +161,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V4.4 activo</b>
-        <span id="statusText">V4.4: cámara trasera reforzada, análisis visual de los bordes de la calzada y líneas blancas estabilizadas. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V4.5 activo</b>
+        <span id="statusText">V4.5: alertas sonoras de riesgo, cámara trasera y bordes de calzada estabilizados. La distancia física en metros todavía no se calcula.</span>
       </div>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
       <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
@@ -169,9 +171,9 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V4.4</h1>
+      <h1>AntiColisión 360 — V4.5</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V4.4</button>
+      <button id="startBtn" type="button">ACTIVAR V4.5 CON AUDIO</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
@@ -179,6 +181,7 @@
         ✓ Bordes de calzada adaptados a la imagen real<br>
         ✓ Detección limpia con esquinas de color<br>
         ✓ Verde / amarillo / rojo según prioridad visual<br>
+        ✓ Alertas sonoras según el nivel de riesgo<br>
         ✓ Animales incluidos<br>
         ✓ Sin inventar metros ni vehículos
       </div>
@@ -187,7 +190,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V4.4</h2>
+      <h2>Diagnóstico V4.5</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -213,6 +216,7 @@
   const riskTitle = document.getElementById('riskTitle');
   const riskDetail = document.getElementById('riskDetail');
   const statusText = document.getElementById('statusText');
+  const soundToggle = document.getElementById('soundToggle');
 
   let stream = null;
   let facingMode = 'environment';
@@ -234,6 +238,67 @@
   let geoError = '';
   let aiError = '';
   let sensorError = '';
+  let audioContext = null;
+  let audioEnabled = true;
+  let audioError = '';
+  let lastAudioAlertAt = -Infinity;
+  let lastAudioLevel = '';
+
+  function updateSoundButton(){
+    soundToggle.textContent=audioEnabled?'🔊 AUDIO':'🔇 AUDIO';
+    soundToggle.className=`pill glass ${audioEnabled?'ok':'warn'}`;
+    soundToggle.setAttribute('aria-label',audioEnabled?'Silenciar alertas sonoras':'Activar alertas sonoras');
+  }
+
+  async function activateAudio(){
+    try{
+      const AudioContext=window.AudioContext||window.webkitAudioContext;
+      if(!AudioContext) throw new Error('Audio no disponible en este navegador');
+      if(!audioContext) audioContext=new AudioContext();
+      if(audioContext.state==='suspended') await audioContext.resume();
+      audioError='';
+      return audioContext.state==='running';
+    }catch(err){
+      audioError=`${err.name||'Error'}: ${err.message||err}`;
+      return false;
+    }
+  }
+
+  function playTone(frequency,start,duration,volume){
+    if(!audioContext || audioContext.state!=='running') return;
+    const oscillator=audioContext.createOscillator();
+    const gain=audioContext.createGain();
+    oscillator.type='sine';
+    oscillator.frequency.setValueAtTime(frequency,start);
+    gain.gain.setValueAtTime(0.0001,start);
+    gain.gain.exponentialRampToValueAtTime(volume,start+0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001,start+duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(start);
+    oscillator.stop(start+duration+0.025);
+  }
+
+  function playRiskAlert(level){
+    if(!audioEnabled || !audioContext || audioContext.state!=='running') return;
+    const now=performance.now();
+    const urgent=level==='ALTO';
+    const repeatAfter=urgent?1250:3100;
+    const escalating=urgent && lastAudioLevel!=='ALTO';
+    if(!escalating && now-lastAudioAlertAt<repeatAfter) return;
+
+    const start=audioContext.currentTime+0.015;
+    if(urgent){
+      playTone(880,start,0.115,0.25);
+      playTone(1120,start+0.15,0.115,0.28);
+      playTone(1320,start+0.30,0.15,0.30);
+    }else{
+      playTone(720,start,0.16,0.16);
+      playTone(880,start+0.20,0.16,0.18);
+    }
+    lastAudioAlertAt=now;
+    lastAudioLevel=level;
+  }
 
   const relevant = new Set([
     'person','bicycle','car','motorcycle','bus','truck',
@@ -512,7 +577,7 @@
     cameraError=lastErr ? `${lastErr.name || 'Error'}: ${lastErr.message || lastErr}` : 'No se encontró una cámara disponible';
     cameraState.textContent='CAM ✕';
     cameraState.className='pill glass danger';
-    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.4.';
+    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.5.';
   }
 
   function startGPS(){
@@ -890,6 +955,12 @@
     const visible=ranked.slice(0,5);
     const highest=visible.length?visible[0]:null;
 
+    if(highest && (highest.risk.level==='ALTO' || highest.risk.level==='MEDIO')){
+      playRiskAlert(highest.risk.level);
+    }else{
+      lastAudioLevel='';
+    }
+
     for(const item of visible){
       drawCornerMarker(item.b,item.risk);
       drawSmallLabel(item.b,item.p,item.risk);
@@ -910,6 +981,9 @@
   }
 
   async function startAll(){
+    // Android sólo habilita Web Audio cuando se inicia desde un toque real.
+    await activateAudio();
+    updateSoundButton();
     startScreen.style.display='none';
     hud.style.display='block';
     await requestSensorPermissionIfNeeded();
@@ -921,6 +995,16 @@
   }
 
   document.getElementById('startBtn').addEventListener('click',startAll);
+
+  soundToggle.addEventListener('click',async()=>{
+    audioEnabled=!audioEnabled;
+    if(audioEnabled){
+      await activateAudio();
+      lastAudioAlertAt=-Infinity;
+      lastAudioLevel='';
+    }
+    updateSoundButton();
+  });
 
   document.getElementById('switchCamera').addEventListener('click',async()=>{
     facingMode=facingMode==='environment'?'user':'environment';
@@ -934,7 +1018,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V4.4 — cámara trasera + bordes adaptativos estabilizados',
+      version:'AntiColisión 360 V4.5 — alertas sonoras + cámara trasera + bordes adaptativos estabilizados',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
@@ -945,6 +1029,7 @@
       cameraAttemptLog,
       gps,
       orientation:orient,
+      audio:{enabled:audioEnabled,state:audioContext?.state||'sin iniciar',lastAlertLevel:lastAudioLevel},
       roadGuide:{adaptive:roadEdges.confidence>.24,confidence:+roadEdges.confidence.toFixed(2),left:roadEdges.left,right:roadEdges.right},
       ai:{
         loaded:!!model,
@@ -954,7 +1039,7 @@
         approximateFps:+aiFps.toFixed(2),
         lastDetectAt:lastDetectAt?new Date(lastDetectAt).toISOString():null
       },
-      errors:{cameraError,geoError,aiError,sensorError},
+      errors:{cameraError,geoError,aiError,sensorError,audioError},
       userAgent:navigator.userAgent
     };
     document.getElementById('diagText').textContent=JSON.stringify(info,null,2);
@@ -966,7 +1051,10 @@
   });
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible' && stream) video.play().catch(()=>{});
+    if(document.visibilityState==='visible' && stream){
+      video.play().catch(()=>{});
+      if(audioEnabled && audioContext?.state==='suspended') audioContext.resume().catch(()=>{});
+    }
   });
 })();
 </script>
