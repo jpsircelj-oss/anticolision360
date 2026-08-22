@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V4.8</title>
+  <title>AntiColisión 360 — V4.9</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -78,6 +78,13 @@
     .alert.show{opacity:1}
     .alert b{font-size:10px;letter-spacing:.04em}
     .alert div{display:none}
+    #dangerFlash{
+      position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;
+      background:radial-gradient(ellipse at center,rgba(255,35,35,.12) 0%,rgba(235,0,0,.28) 57%,rgba(190,0,0,.62) 100%);
+      box-shadow:inset 0 0 65px rgba(255,0,0,.50)
+    }
+    #dangerFlash.active{animation:dangerPulse .78s ease-in-out infinite}
+    @keyframes dangerPulse{0%,100%{opacity:.12}48%{opacity:.94}}
 
     .bottom{
       position:absolute;right:10px;
@@ -122,12 +129,13 @@
   <video id="video" autoplay playsinline muted></video>
   <canvas id="overlay"></canvas>
   <div class="shade"></div>
+  <div id="dangerFlash" aria-hidden="true"></div>
 
   <div id="hud" style="display:none">
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V4.8</span>
+        <span>V4.9</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -161,8 +169,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V4.8 activo</b>
-        <span id="statusText">V4.8: cámara trasera reforzada, audio aumentado y bordes reales de calzada. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V4.9 activo</b>
+        <span id="statusText">V4.9: cámara trasera reforzada, audio reforzado, destello rojo y bordes reales de calzada. La distancia física en metros todavía no se calcula.</span>
       </div>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
       <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
@@ -171,9 +179,9 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V4.8</h1>
+      <h1>AntiColisión 360 — V4.9</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V4.8 CON AUDIO</button>
+      <button id="startBtn" type="button">ACTIVAR V4.9 CON AUDIO</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
@@ -190,7 +198,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V4.8</h2>
+      <h2>Diagnóstico V4.9</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -213,6 +221,7 @@
   const countEl = document.getElementById('count');
   const fpsEl = document.getElementById('fps');
   const riskAlert = document.getElementById('riskAlert');
+  const dangerFlash = document.getElementById('dangerFlash');
   const riskTitle = document.getElementById('riskTitle');
   const riskDetail = document.getElementById('riskDetail');
   const statusText = document.getElementById('statusText');
@@ -268,11 +277,11 @@
     if(!audioContext || audioContext.state!=='running') return;
     const oscillator=audioContext.createOscillator();
     const gain=audioContext.createGain();
-    oscillator.type='sine';
+    oscillator.type='triangle';
     oscillator.frequency.setValueAtTime(frequency,start);
     gain.gain.setValueAtTime(0.0001,start);
-    // +150 % respecto del nivel original; el límite evita distorsión.
-    gain.gain.exponentialRampToValueAtTime(Math.min(volume*2.5,0.95),start+0.012);
+    // +280 % respecto del nivel original; el límite evita distorsión.
+    gain.gain.exponentialRampToValueAtTime(Math.min(volume*3.8,0.98),start+0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001,start+duration);
     oscillator.connect(gain);
     gain.connect(audioContext.destination);
@@ -819,7 +828,8 @@
   // Si la evidencia es insuficiente no inventa líneas, carriles ni flechas.
   const PROBE_WIDTH=192, PROBE_HEIGHT=112;
   const ROAD_ROWS=[.88,.78,.68,.59];
-  const ROAD_CONFIDENCE=.56;
+  const ROAD_CONFIDENCE=.68;
+  const MIN_ROAD_SPEED_KMH=7;
   const roadProbe=document.createElement('canvas');
   roadProbe.width=PROBE_WIDTH;
   roadProbe.height=PROBE_HEIGHT;
@@ -841,6 +851,11 @@
         roadEdges.stableFrames=0;
       }
     };
+
+    // Evita interpretar muebles, baldosas o interiores como si fueran una calle.
+    // La guía sólo se activa cuando el GPS confirma que el vehículo avanza.
+    const speedKmh=Number.isFinite(gps.speed)?gps.speed*3.6:0;
+    if(speedKmh<MIN_ROAD_SPEED_KMH){loseRoad();return;}
 
     try{
       const vw=video.videoWidth||1280,vh=video.videoHeight||720;
@@ -923,7 +938,7 @@
 
   function drawRoadGuide(sw,sh,cx,horizon){
     updateRoadEdges(sw,sh);
-    if(roadEdges.confidence<ROAD_CONFIDENCE || roadEdges.stableFrames<3 ||
+    if(roadEdges.confidence<ROAD_CONFIDENCE || roadEdges.stableFrames<5 ||
        !roadEdges.left?.points || !roadEdges.right?.points) return;
 
     ctx.save();
@@ -1023,10 +1038,12 @@
       const name=labels[highest.p.class]||highest.p.class.toUpperCase();
       riskTitle.textContent=`RIESGO • ${name}`;
       riskAlert.classList.add('show');
+      dangerFlash.classList.add('active');
       riskAlert.style.borderColor=highest.risk.color;
       riskAlert.style.color=highest.risk.color;
     }else{
       riskAlert.classList.remove('show');
+      dangerFlash.classList.remove('active');
     }
 
     requestAnimationFrame(draw);
@@ -1091,7 +1108,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V4.8 — cámara trasera reforzada + audio 150 % + bordes reales',
+      version:'AntiColisión 360 V4.9 — cámara trasera reforzada + audio 280 % + destello rojo + bordes reales',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
@@ -1103,7 +1120,7 @@
       gps,
       orientation:orient,
       audio:{enabled:audioEnabled,state:audioContext?.state||'sin iniciar',lastAlertLevel:lastAudioLevel},
-      roadGuide:{adaptive:roadEdges.confidence>=ROAD_CONFIDENCE && roadEdges.stableFrames>=3,confidence:+roadEdges.confidence.toFixed(2),stableFrames:roadEdges.stableFrames,left:roadEdges.left,right:roadEdges.right},
+      roadGuide:{adaptive:roadEdges.confidence>=ROAD_CONFIDENCE && roadEdges.stableFrames>=5,minimumSpeedKmh:MIN_ROAD_SPEED_KMH,confidence:+roadEdges.confidence.toFixed(2),stableFrames:roadEdges.stableFrames,left:roadEdges.left,right:roadEdges.right},
       ai:{
         loaded:!!model,
         tfVersion:typeof tf!=='undefined'?tf.version.tfjs:null,
