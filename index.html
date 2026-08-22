@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V4.2</title>
+  <title>AntiColisión 360 — V4.4</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -126,7 +126,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V4.2</span>
+        <span>V4.4</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -159,8 +159,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V4.2 activo</b>
-        <span id="statusText">V4.2: cámara trasera reforzada + bordes laterales continuos, más blancos y más gruesos. Las líneas discontinuas quedan reservadas para separación de carriles. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V4.4 activo</b>
+        <span id="statusText">V4.4: cámara trasera reforzada, análisis visual de los bordes de la calzada y líneas blancas estabilizadas. La distancia física en metros todavía no se calcula.</span>
       </div>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
       <button id="diagnostic" class="btn" type="button">Diagnóstico</button>
@@ -169,13 +169,14 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V4.2</h1>
+      <h1>AntiColisión 360 — V4.4</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V4.2</button>
+      <button id="startBtn" type="button">ACTIVAR V4.4</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
         ✓ Velocidad GPS y rumbo<br>
+        ✓ Bordes de calzada adaptados a la imagen real<br>
         ✓ Detección limpia con esquinas de color<br>
         ✓ Verde / amarillo / rojo según prioridad visual<br>
         ✓ Animales incluidos<br>
@@ -186,7 +187,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V4.2</h2>
+      <h2>Diagnóstico V4.4</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -511,7 +512,7 @@
     cameraError=lastErr ? `${lastErr.name || 'Error'}: ${lastErr.message || lastErr}` : 'No se encontró una cámara disponible';
     cameraState.textContent='CAM ✕';
     cameraState.className='pill glass danger';
-    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.2.';
+    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara de Chrome y volvé a activar V4.4.';
   }
 
   function startGPS(){
@@ -734,8 +735,58 @@
     ctx.restore();
   }
 
+  // Analiza una copia pequeña de la imagen para seguir contrastes del pavimento.
+  // Es una ayuda visual: no sustituye sensores ni confirma bordes reales.
+  const roadProbe=document.createElement('canvas');
+  roadProbe.width=120;
+  roadProbe.height=72;
+  const roadProbeCtx=roadProbe.getContext('2d',{willReadFrequently:true});
+  let roadEdges={left:null,right:null,confidence:0,lastAt:0};
+  let smoothedOrientation={cx:null,horizon:null};
+
+  function updateRoadEdges(sw,sh){
+    const now=performance.now();
+    if(!stream || video.readyState<2 || !roadProbeCtx || now-roadEdges.lastAt<190) return;
+    roadEdges.lastAt=now;
+    try{
+      const vw=video.videoWidth||1280,vh=video.videoHeight||720;
+      const scale=Math.max(sw/vw,sh/vh);
+      const cropW=sw/scale,cropH=sh/scale;
+      roadProbeCtx.drawImage(video,(vw-cropW)/2,(vh-cropH)/2,cropW,cropH,0,0,120,72);
+      const pixels=roadProbeCtx.getImageData(0,0,120,72).data;
+      const luma=(x,y)=>{
+        const i=(y*120+x)*4;
+        return pixels[i]*.299+pixels[i+1]*.587+pixels[i+2]*.114;
+      };
+      const findEdge=(y,start,end,preferred)=>{
+        let bestX=preferred,bestScore=0;
+        for(let x=start;x<=end;x++){
+          const contrast=Math.abs(luma(x-3,y)-luma(x+3,y));
+          const continuity=Math.abs(luma(x-2,Math.max(0,y-2))-luma(x+2,Math.max(0,y-2)));
+          const distancePenalty=Math.abs(x-preferred)*.55;
+          const score=contrast+continuity*.42-distancePenalty;
+          if(score>bestScore){bestScore=score;bestX=x;}
+        }
+        return {x:bestX/120,score:bestScore};
+      };
+      const leftNear=findEdge(61,10,56,37);
+      const leftMid=findEdge(49,18,58,45);
+      const rightNear=findEdge(61,64,109,83);
+      const rightMid=findEdge(49,62,102,75);
+      const confidence=Math.min(1,(leftNear.score+leftMid.score+rightNear.score+rightMid.score)/190);
+      if(confidence<.20){roadEdges.confidence*=.85;return;}
+      const blend=.16;
+      const smooth=(old,value)=>old===null?value:old*(1-blend)+value*blend;
+      const left={near:leftNear.x,mid:leftMid.x};
+      const right={near:rightNear.x,mid:rightMid.x};
+      roadEdges.left=roadEdges.left?{near:smooth(roadEdges.left.near,left.near),mid:smooth(roadEdges.left.mid,left.mid)}:left;
+      roadEdges.right=roadEdges.right?{near:smooth(roadEdges.right.near,right.near),mid:smooth(roadEdges.right.mid,right.mid)}:right;
+      roadEdges.confidence=smooth(roadEdges.confidence,confidence);
+    }catch(_){roadEdges.confidence*=.9;}
+  }
+
   function drawRoadGuide(sw,sh,cx,horizon){
-    // V4.2: bordes de calzada continuos y claramente visibles.
+    // V4.4: bordes de calzada continuos y claramente visibles.
     // Se dibuja un halo suave y un núcleo blanco para que el borde se vea
     // sobre asfalto claro u oscuro sin convertir la interfaz en un videojuego.
     // La posición continúa compensándose con la inclinación/orientación del teléfono.
@@ -744,25 +795,32 @@
     ctx.lineJoin='round';
     ctx.setLineDash([]);
 
-    const leftNearX=sw*.32, rightNearX=sw*.68;
+    updateRoadEdges(sw,sh);
+    const adaptive=roadEdges.confidence>.24 && roadEdges.left && roadEdges.right;
+    const leftNearX=sw*(adaptive?roadEdges.left.near:.32);
+    const rightNearX=sw*(adaptive?roadEdges.right.near:.68);
+    const leftMidX=sw*(adaptive?roadEdges.left.mid:.39);
+    const rightMidX=sw*(adaptive?roadEdges.right.mid:.61);
     const leftFarX=cx-sw*.060, rightFarX=cx+sw*.060;
+    const traceEdges=()=>{
+      ctx.beginPath();
+      ctx.moveTo(leftNearX,sh*.90);
+      ctx.quadraticCurveTo(leftMidX,sh*.68,leftFarX,horizon);
+      ctx.moveTo(rightNearX,sh*.90);
+      ctx.quadraticCurveTo(rightMidX,sh*.68,rightFarX,horizon);
+      ctx.stroke();
+    };
 
     // Halo exterior: mejora contraste sin tapar la imagen real.
-    ctx.strokeStyle='rgba(255,255,255,.18)';
-    ctx.lineWidth=6.2;
-    ctx.beginPath();
-    ctx.moveTo(leftNearX,sh*.90); ctx.lineTo(leftFarX,horizon);
-    ctx.moveTo(rightNearX,sh*.90); ctx.lineTo(rightFarX,horizon);
-    ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.24)';
+    ctx.lineWidth=7.4;
+    traceEdges();
 
     // Línea principal: blanca, continua y aproximadamente 50% más gruesa
     // que la V4.1 (2.1 px -> 3.2 px).
-    ctx.strokeStyle='rgba(255,255,255,.72)';
-    ctx.lineWidth=3.2;
-    ctx.beginPath();
-    ctx.moveTo(leftNearX,sh*.90); ctx.lineTo(leftFarX,horizon);
-    ctx.moveTo(rightNearX,sh*.90); ctx.lineTo(rightFarX,horizon);
-    ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.86)';
+    ctx.lineWidth=3.8;
+    traceEdges();
 
     // Referencia central discontinua MUY tenue: sólo sugiere separación de carril.
     // No pretende afirmar que exista una línea pintada real en la calle.
@@ -800,8 +858,12 @@
 
     const beta=Number.isFinite(orient.beta)?orient.beta:70;
     const gamma=Number.isFinite(orient.gamma)?orient.gamma:0;
-    const cx=sw/2 + Math.max(-sw*.12,Math.min(sw*.12,gamma*1.7));
-    const horizon=sh*.52 + Math.max(-sh*.09,Math.min(sh*.09,(beta-70)*1.6));
+    const targetCx=sw/2 + Math.max(-sw*.12,Math.min(sw*.12,gamma*1.7));
+    const targetHorizon=sh*.52 + Math.max(-sh*.09,Math.min(sh*.09,(beta-70)*1.6));
+    smoothedOrientation.cx=smoothedOrientation.cx===null?targetCx:smoothedOrientation.cx*.88+targetCx*.12;
+    smoothedOrientation.horizon=smoothedOrientation.horizon===null?targetHorizon:smoothedOrientation.horizon*.88+targetHorizon*.12;
+    const cx=smoothedOrientation.cx;
+    const horizon=smoothedOrientation.horizon;
 
     drawRoadGuide(sw,sh,cx,horizon);
 
@@ -872,7 +934,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V4.2 — cámara trasera + bordes continuos reforzados',
+      version:'AntiColisión 360 V4.4 — cámara trasera + bordes adaptativos estabilizados',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
@@ -883,6 +945,7 @@
       cameraAttemptLog,
       gps,
       orientation:orient,
+      roadGuide:{adaptive:roadEdges.confidence>.24,confidence:+roadEdges.confidence.toFixed(2),left:roadEdges.left,right:roadEdges.right},
       ai:{
         loaded:!!model,
         tfVersion:typeof tf!=='undefined'?tf.version.tfjs:null,
