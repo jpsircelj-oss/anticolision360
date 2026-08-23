@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V5.0</title>
+  <title>AntiColisión 360 — V5.1</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -135,7 +135,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V5.0</span>
+        <span>V5.1</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -169,8 +169,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V5.0 activo</b>
-        <span id="statusText">V5.0: líneas desde 5 km/h, sonido únicamente ante peligro rojo, zoom y destello rojo. La distancia física en metros todavía no se calcula.</span>
+        <b id="systemText">Sistema V5.1 activo</b>
+        <span id="statusText">V5.1: líneas desde 5 km/h, sonido únicamente ante peligro rojo, acercamiento automático al recuadro rojo y destello rojo.</span>
       </div>
       <button id="zoomToggle" class="btn" type="button" aria-label="Cambiar aumento de la cámara">ZOOM 1.35×</button>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
@@ -180,15 +180,15 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V5.0</h1>
+      <h1>AntiColisión 360 — V5.1</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V5.0</button>
+      <button id="startBtn" type="button">ACTIVAR V5.1</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
         ✓ Velocidad GPS y rumbo<br>
         ✓ Bordes blancos de calzada desde 5 km/h<br>
-        ✓ Zoom de cámara ajustable<br>
+        ✓ Zoom automático hacia el recuadro rojo<br>
         ✓ Detección limpia con esquinas de color<br>
         ✓ Verde / amarillo / rojo según prioridad visual<br>
         ✓ Sonido únicamente ante peligro rojo inminente<br>
@@ -200,7 +200,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V5.0</h2>
+      <h2>Diagnóstico V5.1</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -231,6 +231,10 @@
   const zoomToggle = document.getElementById('zoomToggle');
   const ZOOM_LEVELS = [1, 1.35, 1.7, 2];
   let cameraZoom = 1.35;
+  let focusZoom = 1.35;
+  let focusPan = {x:0,y:0};
+  let lastDangerFocus = null;
+  let lastDangerFocusAt = -Infinity;
 
   let stream = null;
   let facingMode = 'environment';
@@ -309,11 +313,52 @@
   }
 
   function updateCameraZoom(){
+    focusZoom=cameraZoom;
+    focusPan={x:0,y:0};
+    lastDangerFocus=null;
+    lastDangerFocusAt=-Infinity;
     const mirror=facingMode==='user'?'scaleX(-1) ':'';
-    video.style.transform=`${mirror}scale(${cameraZoom})`;
+    video.style.transform=`translate(0px,0px) ${mirror}scale(${focusZoom})`;
     zoomToggle.textContent=`ZOOM ${cameraZoom.toFixed(cameraZoom===1?0:cameraZoom===1.35?2:1)}×`;
     zoomToggle.setAttribute('aria-label',`Cambiar aumento de cámara; actual ${cameraZoom} veces`);
     roadEdges={left:null,right:null,confidence:0,lastAt:0,stableFrames:0};
+  }
+
+  function updateDangerFocus(highest,sw,sh){
+    const now=performance.now();
+    if(highest?.risk.level==='ALTO'){
+      lastDangerFocus=highest.p.bbox;
+      lastDangerFocusAt=now;
+    }
+
+    const tracking=lastDangerFocus && now-lastDangerFocusAt<900;
+    const targetZoom=tracking?Math.min(cameraZoom*1.42,2.6):cameraZoom;
+    let targetX=0,targetY=0;
+
+    if(tracking){
+      const vw=video.videoWidth||1280,vh=video.videoHeight||720;
+      let [x,y,w,h]=lastDangerFocus;
+      if(facingMode==='user') x=vw-x-w;
+      const scale=Math.max(sw/vw,sh/vh)*targetZoom;
+      const maxX=Math.max(0,(targetZoom-1)*sw*.48);
+      const maxY=Math.max(0,(targetZoom-1)*sh*.40);
+      targetX=Math.max(-maxX,Math.min(maxX,-(x+w/2-vw/2)*scale));
+      targetY=Math.max(-maxY,Math.min(maxY,-(y+h/2-vh/2)*scale-sh*.04));
+    }
+
+    const blend=tracking?.105:.075;
+    focusZoom+=(targetZoom-focusZoom)*blend;
+    focusPan.x+=(targetX-focusPan.x)*blend;
+    focusPan.y+=(targetY-focusPan.y)*blend;
+    if(!tracking && Math.abs(focusZoom-cameraZoom)<.002 &&
+       Math.abs(focusPan.x)<.2 && Math.abs(focusPan.y)<.2){
+      focusZoom=cameraZoom;
+      focusPan={x:0,y:0};
+      lastDangerFocus=null;
+    }
+
+    const mirror=facingMode==='user'?'scaleX(-1) ':'';
+    video.style.transform=`translate(${focusPan.x.toFixed(2)}px,${focusPan.y.toFixed(2)}px) ${mirror}scale(${focusZoom.toFixed(4)})`;
   }
 
   const relevant = new Set([
@@ -737,7 +782,7 @@
   function videoToScreenBox(bbox){
     const vw=video.videoWidth||1280, vh=video.videoHeight||720;
     const sw=innerWidth, sh=innerHeight;
-    const scale=Math.max(sw/vw,sh/vh)*cameraZoom;
+    const scale=Math.max(sw/vw,sh/vh)*focusZoom;
     const dispW=vw*scale, dispH=vh*scale;
     const ox=(sw-dispW)/2, oy=(sh-dispH)/2;
 
@@ -745,8 +790,8 @@
     if(facingMode==='user') x=vw-x-w;
 
     return {
-      x:ox+x*scale,
-      y:oy+y*scale,
+      x:ox+x*scale+focusPan.x,
+      y:oy+y*scale+focusPan.y,
       w:w*scale,
       h:h*scale
     };
@@ -865,9 +910,11 @@
 
     try{
       const vw=video.videoWidth||1280,vh=video.videoHeight||720;
-      const scale=Math.max(sw/vw,sh/vh)*cameraZoom;
+      const scale=Math.max(sw/vw,sh/vh)*focusZoom;
       const cropW=sw/scale,cropH=sh/scale;
-      roadProbeCtx.drawImage(video,(vw-cropW)/2,(vh-cropH)/2,cropW,cropH,0,0,PROBE_WIDTH,PROBE_HEIGHT);
+      const cropX=(vw-cropW)/2-focusPan.x/scale;
+      const cropY=(vh-cropH)/2-focusPan.y/scale;
+      roadProbeCtx.drawImage(video,cropX,cropY,cropW,cropH,0,0,PROBE_WIDTH,PROBE_HEIGHT);
       const pixels=roadProbeCtx.getImageData(0,0,PROBE_WIDTH,PROBE_HEIGHT).data;
       const luma=(x,y)=>{
         const i=(Math.max(0,Math.min(PROBE_HEIGHT-1,y))*PROBE_WIDTH+Math.max(0,Math.min(PROBE_WIDTH-1,x)))*4;
@@ -1027,6 +1074,7 @@
 
     const visible=ranked.slice(0,5);
     const highest=visible.length?visible[0]:null;
+    updateDangerFocus(highest,sw,sh);
 
     if(highest && highest.risk.level==='ALTO'){
       playRiskAlert(highest.risk.level);
@@ -1120,12 +1168,13 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V5.0 — líneas desde 5 km/h + sonido solo rojo + zoom + destello rojo',
+      version:'AntiColisión 360 V5.1 — líneas desde 5 km/h + sonido solo rojo + zoom automático al peligro + destello rojo',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
       cameraFacing:facingMode,
       cameraZoom,
+      dangerFocus:{zoom:+focusZoom.toFixed(2),panX:Math.round(focusPan.x),panY:Math.round(focusPan.y),tracking:!!lastDangerFocus},
       activeCameraInfo,
       cameraTracks:tracks,
       camerasDetected:videoDevices.map((d,i)=>({index:i,label:d.label,deviceId:d.deviceId,groupId:d.groupId})),
