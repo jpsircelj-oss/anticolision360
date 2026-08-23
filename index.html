@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V5.3</title>
+  <title>AntiColisión 360 — V5.4</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -12,24 +12,25 @@
 
   <style>
     :root{
-      --panel:rgba(255,255,255,.46);
-      --panel2:rgba(255,255,255,.74);
-      --line:rgba(255,255,255,.64);
-      --txt:#182435;
-      --muted:#506076;
-      --ok:#118755;
+      --panel:rgba(8,13,19,.68);
+      --panel2:rgba(5,9,14,.82);
+      --line:rgba(255,255,255,.16);
+      --txt:#f6f8fb;
+      --muted:#aab4c2;
+      --ok:#48e5a4;
       --cyan:#48c8f4;
-      --yellow:#a76400;
-      --danger:#df263a;
+      --yellow:#ffd35a;
+      --danger:#ff5969;
     }
     *{box-sizing:border-box}
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02050a;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--txt)}
     body{overscroll-behavior:none}
     #app{position:fixed;inset:0;background:#02050a}
     video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    #cameraWhiteVeil{position:absolute;inset:0;pointer-events:none;background:rgba(255,255,255,.19)}
     #overlay{pointer-events:none}
-    .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(255,255,255,.16),transparent 25%,transparent 72%,rgba(255,255,255,.19))}
-    .glass{backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);background:var(--panel);border:1px solid var(--line);box-shadow:0 5px 20px rgba(20,35,55,.12)}
+    .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.28),transparent 24%,transparent 70%,rgba(0,0,0,.38))}
+    .glass{backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 28px rgba(0,0,0,.22)}
     /* V4 — líneas de calzada 50% más anchas y 40% más visibles */
     .top{
       position:absolute;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;
@@ -38,16 +39,16 @@
     }
     .brand{
       border-radius:12px;padding:6px 9px;display:flex;align-items:center;gap:6px;
-      background:rgba(255,255,255,.57);border:1px solid rgba(255,255,255,.74);
+      background:rgba(5,9,14,.48);border:1px solid rgba(255,255,255,.11);
       box-shadow:none
     }
     .brand b{font-size:12px;line-height:1}
-    .brand span{font-size:9px;color:rgba(24,36,53,.65);margin:0}
+    .brand span{font-size:9px;color:rgba(255,255,255,.58);margin:0}
     .states{display:flex;align-items:center;gap:5px}
     .states button{appearance:none;font:inherit;pointer-events:auto;cursor:pointer}
     .pill{
       border-radius:999px;padding:5px 7px;font-size:9px;white-space:nowrap;
-      background:rgba(255,255,255,.58);border:1px solid rgba(255,255,255,.74);
+      background:rgba(5,9,14,.48);border:1px solid rgba(255,255,255,.11);
       box-shadow:none
     }
     .ok{color:var(--ok)}
@@ -60,10 +61,10 @@
     }
     .metric{
       border-radius:12px;padding:6px 8px;min-width:0;
-      background:rgba(255,255,255,.57);border:1px solid rgba(255,255,255,.72);
+      background:rgba(5,9,14,.46);border:1px solid rgba(255,255,255,.10);
       box-shadow:none
     }
-    .metric .k{font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:rgba(24,36,53,.66)}
+    .metric .k{font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.48)}
     .metric .v{font-size:15px;font-weight:800;margin-top:0;line-height:1}
     .metric .s{display:none}
 
@@ -72,8 +73,8 @@
       top:max(48px,calc(env(safe-area-inset-top) + 44px));
       max-width:62%;text-align:center;border-radius:999px;padding:6px 10px;
       pointer-events:none;opacity:0;transition:opacity .14s ease;
-      background:rgba(255,255,255,.74);box-shadow:none;
-      border:1px solid rgba(255,255,255,.78)
+      background:rgba(5,9,14,.54);box-shadow:none;
+      border:1px solid rgba(255,255,255,.12)
     }
     .alert.show{opacity:1}
     .alert b{font-size:10px;letter-spacing:.04em}
@@ -93,27 +94,27 @@
     }
     .status{display:none}
     .btn{
-      appearance:none;border-radius:12px;color:#182435;padding:8px 9px;
+      appearance:none;border-radius:12px;color:#fff;padding:8px 9px;
       font-weight:700;font-size:9px;min-height:34px;
-      background:rgba(255,255,255,.64);border:1px solid rgba(255,255,255,.80);
+      background:rgba(5,9,14,.56);border:1px solid rgba(255,255,255,.13);
       box-shadow:none;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)
     }
     .btn:active{transform:scale(.98)}
 
     #startScreen{
       position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-      padding:26px;background:radial-gradient(circle at 50% 23%,#ffffff 0,#edf4fb 48%,#dce7f1 100%);z-index:20
+      padding:26px;background:radial-gradient(circle at 50% 23%,#0b1d2d 0,#05080d 48%,#020305 100%);z-index:20
     }
-    .startBox{width:min(100%,620px);border:1px solid var(--line);border-radius:28px;padding:26px;background:rgba(255,255,255,.78);box-shadow:0 18px 50px rgba(31,52,77,.12)}
+    .startBox{width:min(100%,620px);border:1px solid var(--line);border-radius:28px;padding:26px;background:rgba(7,12,18,.9)}
     .startBox h1{font-size:29px;margin:0 0 8px}
     .startBox p{color:var(--muted);line-height:1.48;margin:0 0 18px}
     .startBox button{width:100%;border:0;border-radius:19px;background:#1682b5;color:#fff;padding:17px;font-size:18px;font-weight:800}
     .startBox small{display:block;color:var(--muted);line-height:1.45;margin-top:14px}
-    .startBox .feature{margin-top:15px;padding-top:15px;border-top:1px solid rgba(31,52,77,.15);font-size:12px;color:#34465b;line-height:1.55}
+    .startBox .feature{margin-top:15px;padding-top:15px;border-top:1px solid var(--line);font-size:12px;color:#dbe4ee;line-height:1.55}
 
-    #diag{position:absolute;inset:0;display:none;background:rgba(237,244,251,.88);padding:22px;z-index:30;overflow:auto}
-    #diagBox{max-width:720px;margin:32px auto;background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:22px;padding:20px}
-    #diag pre{white-space:pre-wrap;word-break:break-word;color:#24354a;font-size:12px;line-height:1.5}
+    #diag{position:absolute;inset:0;display:none;background:rgba(0,0,0,.82);padding:22px;z-index:30;overflow:auto}
+    #diagBox{max-width:720px;margin:32px auto;background:#0c1118;border:1px solid var(--line);border-radius:22px;padding:20px}
+    #diag pre{white-space:pre-wrap;word-break:break-word;color:#dbe5f2;font-size:12px;line-height:1.5}
     #diag button{border:0;border-radius:15px;padding:13px 17px;font-weight:750}
 
     @media(max-width:520px){
@@ -127,6 +128,7 @@
 <body>
 <div id="app">
   <video id="video" autoplay playsinline muted></video>
+  <div id="cameraWhiteVeil" aria-hidden="true"></div>
   <canvas id="overlay"></canvas>
   <div class="shade"></div>
   <div id="dangerFlash" aria-hidden="true"></div>
@@ -135,7 +137,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V5.3</span>
+        <span>V5.4</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -169,8 +171,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V5.3 activo</b>
-        <span id="statusText">V5.3: fondo blanco transparente, zoom automático al peligro rojo y líneas desde 5 km/h.</span>
+        <b id="systemText">Sistema V5.4 activo</b>
+        <span id="statusText">V5.4: imagen de cámara suavemente aclarada, etiquetas negras, zoom automático al peligro y líneas desde 5 km/h.</span>
       </div>
       <button id="zoomToggle" class="btn" type="button" aria-label="Cambiar aumento de la cámara">ZOOM 1.35×</button>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
@@ -180,16 +182,17 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V5.3</h1>
+      <h1>AntiColisión 360 — V5.4</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V5.3</button>
+      <button id="startBtn" type="button">ACTIVAR V5.4</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
         ✓ Velocidad GPS y rumbo<br>
         ✓ Bordes blancos de calzada desde 5 km/h<br>
         ✓ Zoom automático hacia el recuadro rojo<br>
-        ✓ Fondo blanco translúcido y transparente<br>
+        ✓ Cámara con fondo blanco suave y transparente<br>
+        ✓ Etiquetas y botones inferiores negros<br>
         ✓ Detección limpia con esquinas de color<br>
         ✓ Verde / amarillo / rojo según prioridad visual<br>
         ✓ Sonido únicamente ante peligro rojo inminente<br>
@@ -201,7 +204,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V5.3</h2>
+      <h2>Diagnóstico V5.4</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -1196,7 +1199,7 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V5.3 — fondo blanco transparente + zoom automático al peligro + líneas desde 5 km/h',
+      version:'AntiColisión 360 V5.4 — cámara aclarada con blanco transparente + etiquetas negras + zoom automático',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
