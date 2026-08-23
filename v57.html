@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>AntiColisión 360 — V5.7</title></head>
+<body style="margin:0;background:#02050a;color:white;font-family:system-ui"><div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">Cargando AntiColisión 360 V5.7…</div>
+<script>
+(async()=>{
+  try{
+    let h=await (await fetch('./index.html?v57='+Date.now(),{cache:'no-store'})).text();
+    h=h.replaceAll('V5.5','V5.7');
+    h=h.replace('V5.7: cámara aclarada 27 %, recuadros verde/amarillo/rojo, destello y alarma solo en rojo, líneas blancas desde 5 km/h.','V5.7: bordes blancos adaptativos por encima del capó, línea media y referencia de posible mano contraria; destello y alarma solo en rojo.');
+    h=h.replace('✓ Bordes blancos de calzada desde 5 km/h<br>','✓ Bordes blancos adaptativos por encima del capó desde 5 km/h<br>\n        ✓ Línea media de la calzada<br>\n        ✓ Referencia de posible mano contraria<br>');
+    h=h.replace('const ROAD_ROWS=[.88,.78,.68,.59];','const ROAD_ROWS=[.80,.72,.65,.59];');
+    h=h.replace("ctx.lineJoin='round';\n    ctx.setLineDash([]);\n\n    const traceSide=points=>{","ctx.lineJoin='round';\n    ctx.setLineDash([]);\n    // V5.7: no dibujar guías sobre el capó / parte inferior del parabrisas.\n    ctx.beginPath();\n    ctx.rect(0,0,sw,sh*.825);\n    ctx.clip();\n\n    const traceSide=points=>{");
+    h=h.replace("ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n    ctx.restore();","ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n\n    // V5.7: referencia visual compacta de la posible mano contraria.\n    // Se muestra sólo cuando los dos bordes de la calzada fueron detectados.\n    const laneRow=1;\n    const laneX=(roadEdges.left.points[laneRow].x+centerPoints[laneRow].x)*.5*sw;\n    const laneY=centerPoints[laneRow].y*sh;\n    ctx.setLineDash([]);\n    ctx.strokeStyle='rgba(255,255,255,.78)';\n    ctx.lineWidth=2.4;\n    ctx.beginPath();\n    ctx.moveTo(laneX,laneY-15); ctx.lineTo(laneX,laneY+9);\n    ctx.moveTo(laneX-6,laneY+2); ctx.lineTo(laneX,laneY+9); ctx.lineTo(laneX+6,laneY+2);\n    ctx.stroke();\n    ctx.font='700 8px system-ui';\n    ctx.textAlign='center';\n    ctx.fillStyle='rgba(255,255,255,.72)';\n    ctx.fillText('POSIBLE MANO CONTRARIA',laneX,laneY-20);\n    ctx.restore();");
+    document.open();document.write(h);document.close();
+  }catch(e){document.getElementById('loading').textContent='No se pudo cargar V5.7: '+e.message;}
+})();
+</script></body></html>
