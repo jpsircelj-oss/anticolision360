@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#05080d">
+  <title>AntiColisión 360 — V5.6</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <style>
+    :root{--ok:#48e5a4;--yellow:#ffd35a;--danger:#ff5969;--txt:#f7f9fc;--panel:rgba(5,9,14,.52)}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02050a;color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    #app{position:fixed;inset:0;background:#02050a}video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#video{transform-origin:center center}#overlay{pointer-events:none}
+    #veil{position:absolute;inset:0;pointer-events:none;background:rgba(255,255,255,.27)}
+    #shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.25),transparent 25%,transparent 72%,rgba(0,0,0,.30))}
+    #flash{position:absolute;inset:0;z-index:4;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,35,35,.10),rgba(235,0,0,.27) 58%,rgba(190,0,0,.62));box-shadow:inset 0 0 70px rgba(255,0,0,.50)}
+    #flash.active{animation:pulse .78s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:.10}48%{opacity:.95}}
+    .glass{background:var(--panel);border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+    #top{position:absolute;z-index:8;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+    .brand{border-radius:12px;padding:6px 9px;font-weight:800;font-size:12px}.brand span{font-size:9px;font-weight:500;opacity:.65;margin-left:5px}
+    #states{display:flex;gap:5px}.pill{border-radius:999px;padding:5px 7px;font-size:9px;white-space:nowrap}.ok{color:var(--ok)}.warn{color:var(--yellow)}.danger{color:var(--danger)}
+    button.pill{pointer-events:auto;color:#fff;font:inherit}
+    #telemetry{position:absolute;z-index:8;left:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:6px;pointer-events:none}.metric{border-radius:12px;padding:6px 8px}.k{font-size:7px;text-transform:uppercase;letter-spacing:.08em;opacity:.55}.v{font-size:15px;font-weight:800;line-height:1.05}
+    #alert{position:absolute;z-index:8;left:50%;top:max(48px,calc(env(safe-area-inset-top) + 44px));transform:translateX(-50%);border-radius:999px;padding:6px 10px;opacity:0;transition:opacity .12s;background:rgba(5,9,14,.60);border:1px solid rgba(255,255,255,.13);font-size:10px;font-weight:800;pointer-events:none}#alert.show{opacity:1}
+    #bottom{position:absolute;z-index:9;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:6px}.btn{border-radius:12px;border:1px solid rgba(255,255,255,.13);background:rgba(5,9,14,.60);color:#fff;padding:8px 9px;font-size:9px;font-weight:700;min-height:34px}
+    #start{position:absolute;z-index:20;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 23%,#0b1d2d,#05080d 50%,#020305)}.box{width:min(100%,620px);border:1px solid rgba(255,255,255,.16);border-radius:26px;padding:24px;background:rgba(7,12,18,.92)}h1{font-size:28px;margin:0 0 8px}.box p{color:#aab4c2;line-height:1.45}.box button{width:100%;border:0;border-radius:18px;background:#1682b5;color:#fff;padding:16px;font-size:18px;font-weight:800}.features{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.14);font-size:12px;line-height:1.55;color:#dbe4ee}
+    #diag{position:absolute;z-index:30;inset:0;display:none;background:rgba(0,0,0,.84);padding:20px;overflow:auto}#diagBox{max-width:760px;margin:28px auto;background:#0c1118;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:18px}#diag pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.45;color:#dbe5f2}#diag button{border:0;border-radius:12px;padding:12px 16px;font-weight:750}
+    @media(max-width:520px){.brand span{display:none}.pill{font-size:8px}.btn{font-size:8px;padding:8px}.metric .v{font-size:14px}}
+  </style>
+</head>
+<body>
+<div id="app">
+  <video id="video" autoplay playsinline muted></video>
+  <div id="veil"></div><canvas id="overlay"></canvas><div id="shade"></div><div id="flash"></div>
+  <div id="hud" style="display:none">
+    <div id="top"><div class="brand glass">AC360 <span>V5.6</span></div><div id="states"><div id="cameraState" class="pill glass warn">CAM…</div><div id="aiState" class="pill glass warn">IA…</div><button id="soundToggle" class="pill glass ok">🔊 AUDIO</button></div></div>
+    <div id="telemetry"><div class="metric glass"><div class="k">Velocidad</div><div id="speed" class="v">--</div></div><div class="metric glass"><div class="k">Rumbo</div><div id="heading" class="v">--°</div></div><div class="metric glass"><div class="k">Detectados</div><div id="count" class="v">0</div></div></div>
+    <div id="alert">RIESGO</div>
+    <div id="bottom"><button id="zoomToggle" class="btn">ZOOM 1.35×</button><button id="switchCamera" class="btn">Cambiar cámara</button><button id="diagnostic" class="btn">Diagnóstico</button></div>
+  </div>
+  <div id="start"><div class="box"><h1>AntiColisión 360 — V5.6</h1><p id="startText">Versión de prueba con cámara trasera, detección real y guías blancas elevadas para que no queden sobre el capot.</p><button id="startBtn">ACTIVAR V5.6</button><div class="features">✓ Cámara trasera por HTTPS<br>✓ Imagen aclarada al 27 %<br>✓ Recuadros verde / amarillo / rojo<br>✓ Destello y alarma solamente en rojo<br>✓ Zoom automático al peligro rojo<br>✓ Líneas blancas desde 5 km/h, desplazadas hacia arriba<br>✓ GPS y rumbo<br>✓ Personas, vehículos, motos, bicicletas y animales</div></div></div>
+  <div id="diag"><div id="diagBox"><h2>Diagnóstico V5.6</h2><pre id="diagText"></pre><button id="closeDiag">Cerrar</button></div></div>
+</div>
+<script src="v56.js"></script>
+</body>
+</html>
