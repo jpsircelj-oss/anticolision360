@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <meta name="theme-color" content="#05080d" />
-  <title>AntiColisión 360 — V5.1</title>
+  <title>AntiColisión 360 — V5.2</title>
 
   <!-- TensorFlow.js + modelo oficial COCO-SSD -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -135,7 +135,7 @@
     <div class="top">
       <div class="brand glass">
         <b>AC360</b>
-        <span>V5.1</span>
+        <span>V5.2</span>
       </div>
       <div class="states">
         <div id="cameraState" class="pill glass warn">CAM…</div>
@@ -169,8 +169,8 @@
 
     <div class="bottom">
       <div class="status glass">
-        <b id="systemText">Sistema V5.1 activo</b>
-        <span id="statusText">V5.1: líneas desde 5 km/h, sonido únicamente ante peligro rojo, acercamiento automático al recuadro rojo y destello rojo.</span>
+        <b id="systemText">Sistema V5.2 activo</b>
+        <span id="statusText">V5.2: zoom automático intenso al recuadro rojo, sonido solo ante peligro y líneas blancas desde 5 km/h.</span>
       </div>
       <button id="zoomToggle" class="btn" type="button" aria-label="Cambiar aumento de la cámara">ZOOM 1.35×</button>
       <button id="switchCamera" class="btn" type="button">Cambiar cámara</button>
@@ -180,9 +180,9 @@
 
   <div id="startScreen">
     <div class="startBox">
-      <h1>AntiColisión 360 — V5.1</h1>
+      <h1>AntiColisión 360 — V5.2</h1>
       <p>Detección real con <b>marcadores mínimos por nivel de riesgo</b>: vehículos, personas, motos, bicicletas y animales.</p>
-      <button id="startBtn" type="button">ACTIVAR V5.1</button>
+      <button id="startBtn" type="button">ACTIVAR V5.2</button>
       <small>Requiere conexión a internet la primera vez para cargar el modelo de IA. Chrome puede pedir permisos de cámara, ubicación y sensores.</small>
       <div class="feature">
         ✓ Cámara trasera real<br>
@@ -200,7 +200,7 @@
 
   <div id="diag">
     <div id="diagBox">
-      <h2>Diagnóstico V5.1</h2>
+      <h2>Diagnóstico V5.2</h2>
       <pre id="diagText"></pre>
       <button id="closeDiag" type="button">Cerrar</button>
     </div>
@@ -235,6 +235,7 @@
   let focusPan = {x:0,y:0};
   let lastDangerFocus = null;
   let lastDangerFocusAt = -Infinity;
+  let dangerZoomActive = false;
 
   let stream = null;
   let facingMode = 'environment';
@@ -317,39 +318,65 @@
     focusPan={x:0,y:0};
     lastDangerFocus=null;
     lastDangerFocusAt=-Infinity;
+    dangerZoomActive=false;
     const mirror=facingMode==='user'?'scaleX(-1) ':'';
     video.style.transform=`translate(0px,0px) ${mirror}scale(${focusZoom})`;
     zoomToggle.textContent=`ZOOM ${cameraZoom.toFixed(cameraZoom===1?0:cameraZoom===1.35?2:1)}×`;
+    zoomToggle.classList.remove('danger');
     zoomToggle.setAttribute('aria-label',`Cambiar aumento de cámara; actual ${cameraZoom} veces`);
     roadEdges={left:null,right:null,confidence:0,lastAt:0,stableFrames:0};
   }
 
   function updateDangerFocus(highest,sw,sh){
     const now=performance.now();
-    if(highest?.risk.level==='ALTO'){
+    const redDanger=highest?.risk.level==='ALTO';
+    if(redDanger){
       lastDangerFocus=highest.p.bbox;
       lastDangerFocusAt=now;
     }
 
-    const tracking=lastDangerFocus && now-lastDangerFocusAt<900;
-    const targetZoom=tracking?Math.min(cameraZoom*1.42,2.6):cameraZoom;
+    // Conserva el objetivo entre pasadas de IA para que el zoom no desaparezca
+    // cuando una detección aislada fluctúa de rojo a amarillo.
+    const tracking=!!lastDangerFocus && now-lastDangerFocusAt<2200;
+    let targetZoom=cameraZoom;
     let targetX=0,targetY=0;
 
     if(tracking){
       const vw=video.videoWidth||1280,vh=video.videoHeight||720;
       let [x,y,w,h]=lastDangerFocus;
       if(facingMode==='user') x=vw-x-w;
+      const coverScale=Math.max(sw/vw,sh/vh);
+      const boxScale=Math.min(sw*.72/Math.max(w*coverScale,1),sh*.62/Math.max(h*coverScale,1));
+      targetZoom=Math.min(3.4,Math.max(cameraZoom*1.8,boxScale));
       const scale=Math.max(sw/vw,sh/vh)*targetZoom;
-      const maxX=Math.max(0,(targetZoom-1)*sw*.48);
-      const maxY=Math.max(0,(targetZoom-1)*sh*.40);
+      const maxX=Math.max(0,(targetZoom-1)*sw*.49);
+      const maxY=Math.max(0,(targetZoom-1)*sh*.46);
       targetX=Math.max(-maxX,Math.min(maxX,-(x+w/2-vw/2)*scale));
-      targetY=Math.max(-maxY,Math.min(maxY,-(y+h/2-vh/2)*scale-sh*.04));
+      targetY=Math.max(-maxY,Math.min(maxY,-(y+h/2-vh/2)*scale));
+
+      // El primer cuadro rojo debe mostrar un cambio perceptible de inmediato.
+      if(!dangerZoomActive){
+        focusZoom=Math.max(focusZoom,Math.min(targetZoom,cameraZoom*1.45));
+        focusPan.x+=(targetX-focusPan.x)*.32;
+        focusPan.y+=(targetY-focusPan.y)*.32;
+      }
     }
 
-    const blend=tracking?.105:.075;
+    const blend=tracking?.22:.065;
     focusZoom+=(targetZoom-focusZoom)*blend;
     focusPan.x+=(targetX-focusPan.x)*blend;
     focusPan.y+=(targetY-focusPan.y)*blend;
+    dangerZoomActive=tracking;
+
+    if(tracking){
+      zoomToggle.textContent=`AUTO ${focusZoom.toFixed(1)}×`;
+      zoomToggle.classList.add('danger');
+      zoomToggle.setAttribute('aria-label',`Zoom automático de peligro: ${focusZoom.toFixed(1)} veces`);
+    }else{
+      zoomToggle.textContent=`ZOOM ${cameraZoom.toFixed(cameraZoom===1?0:cameraZoom===1.35?2:1)}×`;
+      zoomToggle.classList.remove('danger');
+      zoomToggle.setAttribute('aria-label',`Cambiar aumento de cámara; actual ${cameraZoom} veces`);
+    }
     if(!tracking && Math.abs(focusZoom-cameraZoom)<.002 &&
        Math.abs(focusPan.x)<.2 && Math.abs(focusPan.y)<.2){
       focusZoom=cameraZoom;
@@ -1168,13 +1195,13 @@
       label:t.label,readyState:t.readyState,settings:t.getSettings()
     })):[];
     const info={
-      version:'AntiColisión 360 V5.1 — líneas desde 5 km/h + sonido solo rojo + zoom automático al peligro + destello rojo',
+      version:'AntiColisión 360 V5.2 — zoom automático intenso al recuadro rojo + líneas desde 5 km/h + sonido solo rojo',
       secureContext:window.isSecureContext,
       url:location.href,
       online:navigator.onLine,
       cameraFacing:facingMode,
       cameraZoom,
-      dangerFocus:{zoom:+focusZoom.toFixed(2),panX:Math.round(focusPan.x),panY:Math.round(focusPan.y),tracking:!!lastDangerFocus},
+      dangerFocus:{zoom:+focusZoom.toFixed(2),panX:Math.round(focusPan.x),panY:Math.round(focusPan.y),tracking:dangerZoomActive},
       activeCameraInfo,
       cameraTracks:tracks,
       camerasDetected:videoDevices.map((d,i)=>({index:i,label:d.label,deviceId:d.deviceId,groupId:d.groupId})),
