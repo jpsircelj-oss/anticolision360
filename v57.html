@@ -1,39 +1,83 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>AntiColisión 360 — V5.7</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#05080d">
+<title>AntiColisión 360 — V5.7</title>
+<style>
+:root{--ok:#58e8aa;--warn:#ffd75e;--danger:#ff5264;--panel:rgba(6,10,15,.64);--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02050a;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}body{overscroll-behavior:none}
+#app{position:fixed;inset:0;background:#02050a;overflow:hidden}#stage{position:absolute;inset:0;transform:scale(1);transition:transform .24s ease;will-change:transform}video,canvas,#veil{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}video{background:#151a20}#veil{pointer-events:none;background:rgba(255,255,255,.27)}#overlay{pointer-events:none}.shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.24),transparent 25%,transparent 72%,rgba(0,0,0,.34))}
+#flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,30,30,.08),rgba(235,0,0,.30) 58%,rgba(180,0,0,.66));box-shadow:inset 0 0 65px rgba(255,0,0,.52);z-index:4}#flash.on{animation:pulse .74s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:.10}50%{opacity:.92}}
+.glass{background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#top{position:absolute;left:10px;right:10px;top:max(10px,env(safe-area-inset-top));display:flex;justify-content:space-between;gap:8px;z-index:10;pointer-events:none}.brand{border-radius:999px;padding:7px 10px;font-weight:850;font-size:12px}.states{display:flex;gap:5px;align-items:center}.pill{border-radius:999px;padding:6px 8px;font-size:9px;font-weight:750;white-space:nowrap}.ok{color:var(--ok)}.warn{color:var(--warn)}.danger{color:var(--danger)}
+#bottomLeft{position:absolute;left:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:6px;z-index:10}.metric{border-radius:12px;padding:6px 8px;min-width:70px}.k{font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.52)}.v{font-size:15px;font-weight:850;line-height:1.05}
+#bottomRight{position:absolute;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:6px;z-index:11}.btn{border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(6,10,15,.62);color:#fff;padding:9px 10px;font-size:8px;font-weight:800;min-height:35px}
+#alert{position:absolute;left:50%;top:max(48px,calc(env(safe-area-inset-top) + 44px));transform:translateX(-50%);z-index:12;border-radius:999px;padding:7px 11px;font-size:10px;font-weight:850;opacity:0;transition:.15s;pointer-events:none}#alert.show{opacity:1}
+#start{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 50% 20%,#0d2232,#05080d 48%,#020305)}.card{width:min(100%,620px);background:rgba(7,12,18,.94);border:1px solid rgba(255,255,255,.14);border-radius:26px;padding:24px}.card h1{font-size:27px;margin:0 0 8px}.card p{color:#b7c1cd;line-height:1.45;margin:0 0 16px}.card button{width:100%;border:0;border-radius:18px;background:#1682b5;color:#fff;padding:16px;font-size:18px;font-weight:850}.features{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);font-size:12px;line-height:1.55;color:#dce5ef}
+#diag{position:absolute;inset:0;z-index:40;display:none;background:rgba(0,0,0,.86);padding:20px;overflow:auto}.diagbox{max-width:720px;margin:25px auto;background:#0c1118;border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:18px}.diagbox pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.45;color:#dce5ef}.diagbox button{border:0;border-radius:12px;padding:11px 14px;font-weight:800}
+@media(max-width:520px){.brand{font-size:11px}.pill{font-size:8px}.metric{min-width:62px}.btn{padding:8px;font-size:8px}}
+</style>
 </head>
-<body style="margin:0;background:#02050a;color:white;font-family:system-ui">
-<div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">Cargando AntiColisión 360 V5.7…</div>
+<body>
+<div id="app">
+  <div id="stage"><video id="video" autoplay playsinline muted></video><div id="veil"></div><canvas id="overlay"></canvas><div class="shade"></div></div>
+  <div id="flash"></div>
+  <div id="hud" style="display:none">
+    <div id="top"><div class="brand glass">AC360 <span style="opacity:.6">V5.7</span></div><div class="states"><div id="camState" class="pill glass warn">CAM…</div><div id="aiState" class="pill glass warn">IA…</div><div id="audioState" class="pill glass ok">🔊 AUDIO</div></div></div>
+    <div id="bottomLeft"><div class="metric glass"><div class="k">Velocidad</div><div id="speed" class="v">--</div></div><div class="metric glass"><div class="k">Rumbo</div><div id="heading" class="v">--°</div></div><div class="metric glass"><div class="k">Detectados</div><div id="count" class="v">0</div></div></div>
+    <div id="bottomRight"><button id="zoomBtn" class="btn">ZOOM 1.00×</button><button id="switchBtn" class="btn">Cambiar cámara</button><button id="diagBtn" class="btn">Diagnóstico</button></div>
+    <div id="alert" class="glass">RIESGO</div>
+  </div>
+  <div id="start"><div class="card"><h1>AntiColisión 360 — V5.7</h1><p>Esta versión abre primero la cámara trasera con el mismo método que funcionó en la prueba y recién después inicia IA, GPS y alertas.</p><button id="startBtn">ACTIVAR V5.7</button><div class="features">✓ Cámara trasera Android sin resolución forzada<br>✓ Imagen aclarada 27 %<br>✓ Detección verde / amarillo / rojo<br>✓ Destello y sonido solamente en rojo<br>✓ Zoom automático sobre riesgo rojo<br>✓ Bordes adaptativos de calzada desde 5 km/h<br>✓ Línea media y referencia de mano contraria<br>✓ Peatones, motos, bicicletas, vehículos y animales</div></div></div>
+  <div id="diag"><div class="diagbox"><h2>Diagnóstico V5.7</h2><pre id="diagText"></pre><button id="closeDiag">Cerrar</button></div></div>
+</div>
 <script>
-(async()=>{
-  try{
-    // V5.7 vuelve a usar SIN MODIFICAR el motor de cámara de V5.2,
-    // que fue la versión estable en este teléfono. Sólo se aplican cambios visuales.
-    let h=await (await fetch('./v5.2.html?v57base='+Date.now(),{cache:'no-store'})).text();
-
-    h=h.replaceAll('V5.2','V5.7');
-    h=h.replaceAll('v5.2','v5.7');
-
-    // Mantener imagen aclarada al 27 %.
-    h=h.replace(/#cameraWhiteVeil\{([^}]*)background:rgba\(255,255,255,[^)]+\)/,
-      '#cameraWhiteVeil{$1background:rgba(255,255,255,.27)');
-
-    // Líneas desde 5 km/h y algo más arriba para no invadir el capó.
-    h=h.replace('const ROAD_ROWS=[.88,.78,.68,.59];','const ROAD_ROWS=[.80,.72,.65,.59];');
-    h=h.replace('const MIN_ROAD_SPEED_KMH=5;','const MIN_ROAD_SPEED_KMH=5;');
-
-    // No tocar startCamera(), attachCandidate(), getUserMedia() ni startAll().
-    // Así la cámara queda exactamente igual a V5.2.
-
-    document.open();
-    document.write(h);
-    document.close();
-  }catch(e){
-    document.getElementById('loading').textContent='No se pudo cargar V5.7: '+e.message;
-  }
+(()=>{
+const video=document.getElementById('video'),overlay=document.getElementById('overlay'),ctx=overlay.getContext('2d'),stage=document.getElementById('stage');
+const start=document.getElementById('start'),hud=document.getElementById('hud'),camState=document.getElementById('camState'),aiState=document.getElementById('aiState'),audioState=document.getElementById('audioState'),speedEl=document.getElementById('speed'),headingEl=document.getElementById('heading'),countEl=document.getElementById('count'),flash=document.getElementById('flash'),alertEl=document.getElementById('alert');
+let stream=null,mode='environment',model=null,predictions=[],detectBusy=false,lastDetect=0,aiError='',cameraError='',gpsError='',audioError='',cameraInfo=null;let gps={speed:null,heading:null,accuracy:null};let watchId=null;let audioCtx=null,lastBeep=0;let userZoom=1,focusZoom=1;let road={left:null,right:null,confidence:0};
+const relevant=new Set(['person','bicycle','car','motorcycle','bus','truck','dog','cat','horse','sheep','cow','elephant','bear','zebra','giraffe']);
+const labels={person:'PERSONA',bicycle:'BICICLETA',car:'AUTO',motorcycle:'MOTO',bus:'BUS',truck:'CAMIÓN',dog:'PERRO',cat:'GATO',horse:'CABALLO',sheep:'OVEJA',cow:'VACA',elephant:'ELEFANTE',bear:'OSO',zebra:'CEBRA',giraffe:'JIRAFA'};
+const animal=new Set(['dog','cat','horse','sheep','cow','elephant','bear','zebra','giraffe']);
+const vulnerable=new Set(['person','bicycle','motorcycle']);
+function stopCamera(){if(stream){try{stream.getTracks().forEach(t=>t.stop())}catch(_e){}stream=null;}video.srcObject=null;}
+async function openCamera(wanted='environment'){
+  stopCamera(); mode=wanted; cameraError=''; camState.textContent=wanted==='environment'?'TRASERA…':'FRONTAL…';camState.className='pill glass warn';
+  if(!window.isSecureContext) throw new Error('La cámara requiere HTTPS');
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia no disponible');
+  const s=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:wanted}}});
+  const track=s.getVideoTracks()[0]; if(!track){s.getTracks().forEach(t=>t.stop());throw new Error('No se recibió pista de video');}
+  stream=s;video.srcObject=s;video.muted=true;video.autoplay=true;video.playsInline=true;video.setAttribute('playsinline','');video.setAttribute('webkit-playsinline','');
+  await video.play(); await new Promise(r=>setTimeout(r,450));
+  const settings=track.getSettings?track.getSettings():{};cameraInfo={label:track.label||'',settings,videoWidth:video.videoWidth,videoHeight:video.videoHeight};
+  mode=settings.facingMode||wanted;camState.textContent=mode==='environment'?'TRASERA ✓':'FRONTAL ✓';camState.className='pill glass ok';cameraError='';return true;
+}
+function loadScript(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error('No cargó '+src));document.head.appendChild(s);});}
+async function startAI(){aiState.textContent='IA…';aiState.className='pill glass warn';try{if(typeof tf==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');if(typeof cocoSsd==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');try{await tf.setBackend('webgl')}catch(_e){}await tf.ready();model=await cocoSsd.load({base:'lite_mobilenet_v2'});aiState.textContent='IA ✓';aiState.className='pill glass ok';aiError='';runDetection();}catch(e){aiError=(e.name||'Error')+': '+(e.message||e);aiState.textContent='IA ✕';aiState.className='pill glass danger';}}
+async function runDetection(){if(!model||!stream||detectBusy||video.readyState<2){setTimeout(runDetection,300);return;}detectBusy=true;try{const all=await model.detect(video,12,.42);predictions=all.filter(p=>relevant.has(p.class));lastDetect=Date.now();aiError='';}catch(e){aiError=(e.name||'Error')+': '+(e.message||e);}finally{detectBusy=false;setTimeout(runDetection,260);}}
+function startGPS(){if(!navigator.geolocation){gpsError='Geolocalización no disponible';return;}if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=navigator.geolocation.watchPosition(p=>{gps.speed=Number.isFinite(p.coords.speed)?p.coords.speed:null;gps.heading=Number.isFinite(p.coords.heading)?p.coords.heading:null;gps.accuracy=Number.isFinite(p.coords.accuracy)?p.coords.accuracy:null;gpsError='';},e=>{gpsError=e.code+': '+e.message;},{enableHighAccuracy:true,maximumAge:500,timeout:15000});}
+async function initAudio(){try{const A=window.AudioContext||window.webkitAudioContext;if(!A)throw new Error('AudioContext no disponible');audioCtx=new A();if(audioCtx.state==='suspended')await audioCtx.resume();audioError='';audioState.textContent='🔊 AUDIO';audioState.className='pill glass ok';}catch(e){audioError=e.message||String(e);audioState.textContent='AUDIO ✕';audioState.className='pill glass danger';}}
+function beepRed(){if(!audioCtx||audioCtx.state!=='running'||Date.now()-lastBeep<900)return;lastBeep=Date.now();const t=audioCtx.currentTime;[0,.16,.32].forEach((d,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='square';o.frequency.value=i===1?980:1180;g.gain.setValueAtTime(.0001,t+d);g.gain.exponentialRampToValueAtTime(.18,t+d+.015);g.gain.exponentialRampToValueAtTime(.0001,t+d+.11);o.connect(g);g.connect(audioCtx.destination);o.start(t+d);o.stop(t+d+.12);});}
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);overlay.width=Math.round(innerWidth*dpr);overlay.height=Math.round(innerHeight*dpr);overlay.style.width=innerWidth+'px';overlay.style.height=innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);}addEventListener('resize',resize);resize();
+function mapBox(bb){const vw=video.videoWidth||480,vh=video.videoHeight||640,sw=innerWidth,sh=innerHeight,scale=Math.max(sw/vw,sh/vh),ox=(sw-vw*scale)/2,oy=(sh-vh*scale)/2;let[x,y,w,h]=bb;if(mode==='user')x=vw-x-w;return{x:ox+x*scale,y:oy+y*scale,w:w*scale,h:h*scale};}
+function riskFor(b,cls){const sw=innerWidth,sh=innerHeight,cx=b.x+b.w/2,bottom=b.y+b.h,center=Math.abs(cx-sw/2)/(sw/2),area=(b.w*b.h)/(sw*sh);let s=0;if(center<.2)s+=2;else if(center<.36)s+=1;if(area>.12)s+=2;else if(area>.04)s+=1;if(bottom>sh*.79)s+=2;else if(bottom>sh*.63)s+=1;const kmh=Number.isFinite(gps.speed)?gps.speed*3.6:0;if(kmh>25&&center<.28)s++;if(kmh>60&&center<.34)s++;if((vulnerable.has(cls)||animal.has(cls))&&center<.42)s++;if(s>=6)return{level:'ALTO',color:'rgba(255,70,82,.98)',score:s};if(s>=4)return{level:'MEDIO',color:'rgba(255,205,64,.98)',score:s};return{level:'BAJO',color:'rgba(58,225,145,.94)',score:s};}
+function marker(b,r,name){const x=b.x,y=b.y,w=b.w,h=b.h,len=Math.max(10,Math.min(24,Math.min(w,h)*.2));ctx.save();ctx.strokeStyle=r.color;ctx.lineWidth=r.level==='ALTO'?3.2:r.level==='MEDIO'?2.5:1.7;ctx.lineCap='round';if(r.level!=='BAJO'){ctx.shadowColor=r.color;ctx.shadowBlur=r.level==='ALTO'?9:4}ctx.beginPath();ctx.moveTo(x,y+len);ctx.lineTo(x,y);ctx.lineTo(x+len,y);ctx.moveTo(x+w-len,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+len);ctx.moveTo(x+w,y+h-len);ctx.lineTo(x+w,y+h);ctx.lineTo(x+w-len,y+h);ctx.moveTo(x+len,y+h);ctx.lineTo(x,y+h);ctx.lineTo(x,y+h-len);ctx.stroke();if(r.level!=='BAJO'){ctx.font='700 10px system-ui';const tw=ctx.measureText(name).width,p=5,hh=18,lx=Math.max(4,Math.min(innerWidth-tw-p*2-4,x)),ly=Math.max(hh+4,y-3);ctx.fillStyle='rgba(4,8,12,.62)';if(ctx.roundRect){ctx.beginPath();ctx.roundRect(lx,ly-hh,tw+p*2,hh,7);ctx.fill()}else ctx.fillRect(lx,ly-hh,tw+p*2,hh);ctx.fillStyle=r.color;ctx.fillText(name,lx+p,ly-5)}ctx.restore();}
+const probe=document.createElement('canvas');probe.width=192;probe.height=128;const pctx=probe.getContext('2d',{willReadFrequently:true});const rows=[.79,.72,.65,.58];
+function drawCoverToProbe(){const vw=video.videoWidth||1,vh=video.videoHeight||1,pw=probe.width,ph=probe.height,scale=Math.max(pw/vw,ph/vh),dw=vw*scale,dh=vh*scale,dx=(pw-dw)/2,dy=(ph-dh)/2;pctx.drawImage(video,dx,dy,dw,dh);}
+function lum(data,i){return .2126*data[i]+.7152*data[i+1]+.0722*data[i+2]}
+function findEdge(data,y,left,prev){const w=probe.width,mid=w/2;let a=left?Math.floor(w*.05):Math.ceil(mid+5),b=left?Math.floor(mid-5):Math.floor(w*.95);if(prev!=null){const px=prev*w;a=Math.max(a,Math.floor(px-28));b=Math.min(b,Math.ceil(px+28));}let bestX=null,best=0;for(let x=a+2;x<b-2;x++){const im=(y*w+x-2)*4,ip=(y*w+x+2)*4;const g=Math.abs(lum(data,ip)-lum(data,im));if(g>best){best=g;bestX=x}}return bestX!=null&&best>20?{x:bestX/w,score:Math.min(1,best/75)}:null;}
+function updateRoad(){const kmh=Number.isFinite(gps.speed)?gps.speed*3.6:0;if(kmh<5||!stream||video.readyState<2){road.confidence*=.82;return;}try{drawCoverToProbe();const img=pctx.getImageData(0,0,probe.width,probe.height),lp=[],rp=[];for(let i=0;i<rows.length;i++){const y=Math.round(rows[i]*probe.height),l=findEdge(img.data,y,true,road.left?.[i]?.x),r=findEdge(img.data,y,false,road.right?.[i]?.x);if(l&&r&&r.x-l.x>.18){lp.push({x:l.x,y:rows[i],score:l.score});rp.push({x:r.x,y:rows[i],score:r.score})}else{lp.push(null);rp.push(null)}}const valid=lp.filter(Boolean).length;if(valid>=3){road.left=lp.map((p,i)=>p||road.left?.[i]||null);road.right=rp.map((p,i)=>p||road.right?.[i]||null);road.confidence=Math.min(1,road.confidence*.7+.35)}else road.confidence*=.82;}catch(_e){road.confidence*=.8}}
+function drawRoad(){if(road.confidence<.38||!road.left||!road.right)return;const sw=innerWidth,sh=innerHeight,L=road.left,R=road.right;if(L.filter(Boolean).length<3||R.filter(Boolean).length<3)return;ctx.save();ctx.strokeStyle='rgba(255,255,255,.94)';ctx.lineWidth=4.2;ctx.lineCap='round';ctx.lineJoin='round';for(const pts of [L,R]){ctx.beginPath();let started=false;pts.forEach(p=>{if(!p)return;const x=p.x*sw,y=p.y*sh;if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)});ctx.stroke()}const C=L.map((p,i)=>p&&R[i]?{x:(p.x+R[i].x)/2,y:p.y}:null);ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=2.8;ctx.setLineDash([13,10]);ctx.beginPath();let started=false;C.forEach(p=>{if(!p)return;const x=p.x*sw,y=p.y*sh;if(!started){ctx.moveTo(x,y);started=true}else ctx.lineTo(x,y)});ctx.stroke();ctx.setLineDash([]);const i=1;if(L[i]&&C[i]){const x=(L[i].x+C[i].x)/2*sw,y=C[i].y*sh;ctx.strokeStyle='rgba(255,255,255,.82)';ctx.lineWidth=2.3;ctx.beginPath();ctx.moveTo(x,y-10);ctx.lineTo(x,y+12);ctx.moveTo(x-6,y+5);ctx.lineTo(x,y+12);ctx.lineTo(x+6,y+5);ctx.stroke();ctx.font='700 8px system-ui';ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.74)';ctx.fillText('MANO CONTRARIA',x,y-16)}ctx.restore();}
+function applyZoom(high){let target=userZoom;if(high&&high.risk.level==='ALTO')target=Math.max(target,1.35);focusZoom=focusZoom*.78+target*.22;stage.style.transform=`scale(${focusZoom.toFixed(3)})`;if(high&&high.risk.level==='ALTO'){const cx=(high.b.x+high.b.w/2)/innerWidth*100,cy=(high.b.y+high.b.h/2)/innerHeight*100;stage.style.transformOrigin=`${Math.max(10,Math.min(90,cx))}% ${Math.max(10,Math.min(90,cy))}%`}else stage.style.transformOrigin='50% 50%';}
+function draw(){ctx.clearRect(0,0,innerWidth,innerHeight);if(stream&&video.readyState>=2){updateRoad();drawRoad()}const ranked=[];for(const p of predictions){const b=mapBox(p.bbox);if(b.x+b.w<0||b.y+b.h<0||b.x>innerWidth||b.y>innerHeight)continue;const r=riskFor(b,p.class),area=(b.w*b.h)/(innerWidth*innerHeight);if(r.level==='BAJO'&&area<.0045)continue;ranked.push({p,b,risk:r,area})}ranked.sort((a,b)=>b.risk.score-a.risk.score||b.p.score-a.p.score||b.area-a.area);const vis=ranked.slice(0,5),high=vis[0]||null;for(const q of vis)marker(q.b,q.risk,labels[q.p.class]||q.p.class.toUpperCase());if(high&&high.risk.level==='ALTO'){flash.classList.add('on');alertEl.textContent='RIESGO • '+(labels[high.p.class]||high.p.class.toUpperCase());alertEl.style.color=high.risk.color;alertEl.classList.add('show');beepRed()}else{flash.classList.remove('on');alertEl.classList.remove('show')}applyZoom(high);speedEl.textContent=Number.isFinite(gps.speed)?Math.max(0,gps.speed*3.6).toFixed(gps.speed*3.6<10?1:0):'--';headingEl.textContent=Number.isFinite(gps.heading)?Math.round(gps.heading)+'°':'--°';countEl.textContent=predictions.length;requestAnimationFrame(draw)}
+async function startAll(){start.querySelector('button').disabled=true;start.querySelector('button').textContent='ABRIENDO CÁMARA…';try{await openCamera('environment');start.style.display='none';hud.style.display='block';draw();startGPS();initAudio();startAI();}catch(e){cameraError=(e.name||'Error')+': '+(e.message||e);camState.textContent='CAM ✕';camState.className='pill glass danger';start.querySelector('button').disabled=false;start.querySelector('button').textContent='REINTENTAR V5.7';const p=start.querySelector('p');p.textContent='No pudo abrir la cámara: '+cameraError;p.style.color='#ff9aa7';}}
+document.getElementById('startBtn').addEventListener('click',startAll);
+document.getElementById('switchBtn').addEventListener('click',async()=>{try{await openCamera(mode==='environment'?'user':'environment')}catch(e){cameraError=(e.name||'Error')+': '+(e.message||e);camState.textContent='CAM ✕';camState.className='pill glass danger'}});
+document.getElementById('zoomBtn').addEventListener('click',()=>{const z=[1,1.35,1.7,2],i=z.indexOf(userZoom);userZoom=z[(i+1)%z.length];document.getElementById('zoomBtn').textContent='ZOOM '+userZoom.toFixed(2)+'×'});
+document.getElementById('diagBtn').addEventListener('click',async()=>{let devices=[];try{devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput').map(d=>({label:d.label,deviceId:d.deviceId,groupId:d.groupId}))}catch(e){devices=[{error:e.message}]}document.getElementById('diagText').textContent=JSON.stringify({version:'V5.7 standalone',secureContext:window.isSecureContext,url:location.href,cameraInfo,devices,gps,roadConfidence:+road.confidence.toFixed(2),ai:{loaded:!!model,lastDetect:lastDetect?new Date(lastDetect).toISOString():null,predictions:predictions.length},errors:{cameraError,aiError,gpsError,audioError},userAgent:navigator.userAgent},null,2);document.getElementById('diag').style.display='block'});document.getElementById('closeDiag').addEventListener('click',()=>document.getElementById('diag').style.display='none');
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&stream)video.play().catch(()=>{})});
 })();
 </script>
 </body>
