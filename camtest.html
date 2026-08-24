@@ -4,68 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#05080d">
-<title>AC360 — Prueba de cámara</title>
+<title>AC360 — Diagnóstico de cámara</title>
 <style>
 html,body{margin:0;width:100%;height:100%;background:#05080d;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
-#app{position:fixed;inset:0;background:#05080d}
-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#222}
-#veil{position:absolute;inset:0;pointer-events:none;background:rgba(255,255,255,.10)}
+#app{position:fixed;inset:0;background:#05080d}video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#222}
+#veil{position:absolute;inset:0;pointer-events:none;background:rgba(255,255,255,.08)}
 #top{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;right:14px;display:flex;justify-content:space-between;gap:8px;z-index:5}
-.pill{background:rgba(0,0,0,.68);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:10px 13px;font-size:13px;font-weight:800}
-#panel{position:absolute;left:14px;right:14px;bottom:max(14px,env(safe-area-inset-bottom));z-index:6;background:rgba(0,0,0,.78);border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:14px}
-#status{font-size:14px;line-height:1.35;margin-bottom:10px}
-#detail{font-size:11px;line-height:1.35;color:#cbd5e1;max-height:110px;overflow:auto;white-space:pre-wrap;word-break:break-word}
-.buttons{display:flex;gap:8px;margin-top:10px}
-button{flex:1;border:0;border-radius:13px;padding:13px 8px;font-weight:800;font-size:13px;color:#fff;background:#167bb1}
-button.secondary{background:#343b45}
-#start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;z-index:10;background:#05080d}
-.card{width:min(100%,520px);background:#111923;border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:22px}
-h1{font-size:25px;margin:0 0 10px}.card p{color:#cbd5e1;line-height:1.45}.card button{width:100%;font-size:17px;padding:16px}
-.ok{color:#6ee7b7}.warn{color:#fde68a}.bad{color:#fda4af}
+.pill{background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:10px 13px;font-size:13px;font-weight:800}
+#panel{position:absolute;left:14px;right:14px;bottom:max(14px,env(safe-area-inset-bottom));z-index:6;background:rgba(0,0,0,.84);border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:14px}
+#status{font-size:14px;line-height:1.35;margin-bottom:10px}#detail{font-size:11px;line-height:1.4;color:#cbd5e1;max-height:170px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.buttons{display:flex;gap:8px;margin-top:10px}button{flex:1;border:0;border-radius:13px;padding:13px 8px;font-weight:800;font-size:13px;color:#fff;background:#167bb1}button.secondary{background:#343b45}
+#start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;z-index:10;background:#05080d}.card{width:min(100%,520px);background:#111923;border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:22px}h1{font-size:25px;margin:0 0 10px}.card p{color:#cbd5e1;line-height:1.45}.card button{width:100%;font-size:17px;padding:16px}.ok{color:#6ee7b7}.warn{color:#fde68a}.bad{color:#fda4af}
 </style>
 </head>
 <body>
-<div id="app">
-<video id="video" autoplay playsinline muted></video><div id="veil"></div>
+<div id="app"><video id="video" autoplay playsinline muted></video><div id="veil"></div>
 <div id="top"><div class="pill">AC360 CAM</div><div id="badge" class="pill warn">SIN INICIAR</div></div>
-<div id="panel" style="display:none"><div id="status">Esperando cámara…</div><div id="detail"></div><div class="buttons"><button id="retry">Reintentar trasera</button><button id="switch" class="secondary">Cambiar cámara</button></div></div>
-<div id="start"><div class="card"><h1>Prueba directa de cámara</h1><p>Esta página prueba solamente la cámara del teléfono, sin IA, GPS ni líneas. Así sabemos si el problema es el permiso/cámara de Chrome o el código de AntiColisión 360.</p><button id="open">ABRIR CÁMARA TRASERA</button></div></div>
-</div>
+<div id="panel" style="display:none"><div id="status">Esperando cámara…</div><div id="detail"></div><div class="buttons"><button id="retry">PROBAR DE NUEVO</button><button id="switch" class="secondary">CAMBIAR CÁMARA</button></div></div>
+<div id="start"><div class="card"><h1>Diagnóstico directo de cámara</h1><p>Primero revisa el permiso de Chrome y luego intenta abrir la cámara. Si el teléfono no responde en 6 segundos, muestra el bloqueo en pantalla.</p><button id="open">DIAGNOSTICAR CÁMARA</button></div></div></div>
 <script>
 (()=>{
 const video=document.getElementById('video'),badge=document.getElementById('badge'),status=document.getElementById('status'),detail=document.getElementById('detail'),panel=document.getElementById('panel'),start=document.getElementById('start');
 let stream=null,mode='environment';
-function stop(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}video.srcObject=null;}
+function stop(){if(stream){try{stream.getTracks().forEach(t=>t.stop())}catch(_){}stream=null;}video.srcObject=null;}
 function show(msg,cls='warn',extra=''){badge.textContent=msg;badge.className='pill '+cls;status.textContent=msg;detail.textContent=extra;panel.style.display='block';}
-async function enumerate(){try{return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput').map((d,i)=>({i,label:d.label,deviceId:d.deviceId?d.deviceId.slice(0,8)+'…':''}));}catch(e){return [{error:e.message}]}}
-async function openCamera(){
- stop(); start.style.display='none';
- if(!window.isSecureContext){show('ERROR: NO HTTPS','bad','Esta página no está en un contexto seguro.');return;}
- if(!navigator.mediaDevices?.getUserMedia){show('CÁMARA NO DISPONIBLE','bad','getUserMedia no existe en este navegador.');return;}
- const tries=[{name:'facing ideal',c:{facingMode:{ideal:mode}}},{name:'facing exact',c:{facingMode:{exact:mode}}},{name:'video básico',c:true}];
- let last=null;
- for(const t of tries){
-  try{
-   show('ABRIENDO '+(mode==='environment'?'TRASERA':'FRONTAL')+'…','warn','Intento: '+t.name);
-   const s=await navigator.mediaDevices.getUserMedia({audio:false,video:t.c});
-   const track=s.getVideoTracks()[0];
-   if(!track) throw new Error('No se recibió pista de video');
-   stream=s;video.srcObject=s;video.muted=true;video.playsInline=true;
-   await video.play();
-   await new Promise(r=>setTimeout(r,500));
-   const settings=track.getSettings?track.getSettings():{};
-   const devices=await enumerate();
-   show('CÁMARA FUNCIONANDO','ok','Track: '+(track.label||'sin nombre')+'\nModo informado: '+(settings.facingMode||'sin informar')+'\nResolución: '+(settings.width||'?')+' × '+(settings.height||'?')+'\nvideoWidth/videoHeight: '+video.videoWidth+' × '+video.videoHeight+'\nCámaras detectadas: '+JSON.stringify(devices,null,2));
-   return;
-  }catch(e){last=e;try{if(stream)stream.getTracks().forEach(x=>x.stop())}catch(_){}stream=null;video.srcObject=null;}
- }
- const devices=await enumerate();
- show('NO PUDO ABRIR','bad',(last?.name||'Error')+': '+(last?.message||last||'desconocido')+'\n\nCámaras detectadas: '+JSON.stringify(devices,null,2)+'\n\nSi aparece NotAllowedError, Chrome tiene bloqueado el permiso de cámara para este sitio.');
-}
-document.getElementById('open').onclick=openCamera;
-document.getElementById('retry').onclick=()=>{mode='environment';openCamera();};
-document.getElementById('switch').onclick=()=>{mode=mode==='environment'?'user':'environment';openCamera();};
+async function permissionState(){try{if(!navigator.permissions?.query)return 'no disponible';const p=await navigator.permissions.query({name:'camera'});return p.state||'desconocido';}catch(e){return 'no disponible';}}
+async function enumerate(){try{return (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput').map((d,i)=>({i,label:d.label||'(sin permiso/nombre)',deviceId:d.deviceId?d.deviceId.slice(0,8)+'…':''}));}catch(e){return [{error:e.name+': '+e.message}]}}
+function gum(constraints,ms=6000){let expired=false;const req=navigator.mediaDevices.getUserMedia({audio:false,video:constraints}).then(s=>{if(expired){try{s.getTracks().forEach(t=>t.stop())}catch(_){}throw new Error('Respuesta tardía de la cámara');}return s;});const timer=new Promise((_,rej)=>setTimeout(()=>{expired=true;rej(Object.assign(new Error('Chrome no respondió al pedido de cámara en 6 segundos'),{name:'TimeoutError'}));},ms));return Promise.race([req,timer]);}
+async function use(s,label){const track=s.getVideoTracks()[0];if(!track)throw new Error('No se recibió pista de video');stream=s;video.srcObject=s;video.muted=true;video.playsInline=true;try{await video.play()}catch(_){}await new Promise(r=>setTimeout(r,500));const settings=track.getSettings?track.getSettings():{};const devices=await enumerate();show('CÁMARA FUNCIONANDO','ok','Permiso Chrome: '+await permissionState()+'\nTrack: '+(track.label||'sin nombre')+'\nModo: '+(settings.facingMode||'sin informar')+'\nResolución: '+(settings.width||'?')+' × '+(settings.height||'?')+'\nVideo: '+video.videoWidth+' × '+video.videoHeight+'\nCámaras: '+JSON.stringify(devices,null,2));}
+async function openCamera(){stop();start.style.display='none';if(!window.isSecureContext){show('ERROR: NO HTTPS','bad','La página no está en contexto seguro.');return;}if(!navigator.mediaDevices?.getUserMedia){show('CÁMARA NO DISPONIBLE','bad','getUserMedia no existe en este navegador.');return;}
+ const perm=await permissionState();const devicesBefore=await enumerate();show('REVISANDO PERMISO…','warn','Permiso Chrome: '+perm+'\nCámaras antes de abrir: '+JSON.stringify(devicesBefore,null,2));
+ if(perm==='denied'){show('PERMISO BLOQUEADO','bad','Chrome informa permiso de cámara: DENEGADO.\n\nTocá el icono de ajustes a la izquierda de la dirección web → Permisos → Cámara → Permitir. Luego volvé y tocá PROBAR DE NUEVO.');return;}
+ const tries=mode==='environment'?[{name:'video básico',c:true},{name:'trasera ideal',c:{facingMode:{ideal:'environment'}}}]:[{name:'video básico',c:true},{name:'frontal ideal',c:{facingMode:{ideal:'user'}}}];let last=null;
+ for(const t of tries){let s=null;try{show('ABRIENDO '+(mode==='environment'?'CÁMARA':'FRONTAL')+'…','warn','Permiso Chrome: '+await permissionState()+'\nIntento: '+t.name+'\nTiempo máximo: 6 segundos');s=await gum(t.c);await use(s,t.name);return;}catch(e){last=e;if(s){try{s.getTracks().forEach(x=>x.stop())}catch(_){}}stream=null;video.srcObject=null;if(e.name==='TimeoutError')break;}}
+ const permAfter=await permissionState();const devices=await enumerate();let advice='';if(permAfter==='denied')advice='Chrome tiene la cámara bloqueada para este sitio.';else if(last?.name==='TimeoutError')advice='El navegador no respondió al pedido de cámara. Esto suele ocurrir cuando el permiso de Cámara de Chrome está bloqueado a nivel del teléfono o la cámara está ocupada.';else advice='Chrome devolvió un error al abrir la cámara.';
+ show('NO PUDO ABRIR','bad',(last?.name||'Error')+': '+(last?.message||last||'desconocido')+'\nPermiso Chrome: '+permAfter+'\n\n'+advice+'\n\nCámaras detectadas: '+JSON.stringify(devices,null,2));}
+document.getElementById('open').onclick=openCamera;document.getElementById('retry').onclick=openCamera;document.getElementById('switch').onclick=()=>{mode=mode==='environment'?'user':'environment';openCamera();};
 })();
-</script>
-</body>
-</html>
+</script></body></html>
