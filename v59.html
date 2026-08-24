@@ -1,13 +1,14 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>AntiColisión 360 — V5.9</title><style>html,body{margin:0;height:100%;background:#05080d;color:#fff;font-family:system-ui}#load{height:100%;display:grid;place-items:center;text-align:center;padding:28px}.card{max-width:560px;background:#081018;border:1px solid #ffffff22;border-radius:24px;padding:24px}b{font-size:24px}</style></head><body><div id="load"><div class="card"><b>AntiColisión 360 — V5.9</b><p>Preparando Calzada Inteligente…</p></div></div><script>
 (async()=>{
 try{
- let src=await (await fetch('./v58.html?v=59base',{cache:'no-store'})).text();
- src=src.replace('background:rgba(255,255,255,.27)','background:transparent');
+ let src=await (await fetch('./v58.html?v=59-sin-velo-20260824',{cache:'no-store'})).text();
+ src=src.replace('video,canvas,#veil{','video,canvas{').replace(/#veil\{[^}]*\}/g,'').replace(/<div id="veil"(?:\s[^>]*)?><\/div>/g,'').replace(",veil=document.getElementById('veil')",'').replaceAll('[video,canvas,veil]','[video,canvas]');
+ if(/#veil\b|id=["']veil["']/.test(src))throw new Error('No se pudo eliminar completamente la capa blanca');
  src=src.replaceAll('AntiColisión 360 — V5.8 Adaptativa','AntiColisión 360 — V5.9 Calzada Inteligente');
  src=src.replaceAll('AC360 V5.8','AC360 V5.9');
  src=src.replaceAll('ACTIVAR V5.8','ACTIVAR V5.9').replaceAll('REINTENTAR V5.8','REINTENTAR V5.9');
  src=src.replaceAll('Diagnóstico V5.8','Diagnóstico V5.9');
- src=src.replace('✓ Imagen aclarada 27 %','✓ Imagen limpia, sin blanco fumado');
+ src=src.replace('✓ Imagen natural, sin filtros ni velo blanco','✓ Imagen natural de cámara, completamente limpia');
  src=src.replace('✓ Bordes blancos desde 5 km/h y guía adaptativa de curva','✓ Calzada inteligente: busca bordes reales y estima hasta 5 carriles<br>✓ Guía de carriles desde 5 km/h y adaptación en curvas');
  src=src.replace('Mantiene la base V5.7 y agrega aprendizaje del conductor, vigilancia ampliada en giros y alarma roja basada en aproximación real estimada.','Mantiene la base adaptativa V5.8, elimina el velo blanco y agrega análisis visual de bordes, carriles y tipo de vía.');
  src=src.replace('Abriendo cámara y cargando adaptación V5.8…','Abriendo cámara y cargando Calzada Inteligente V5.9…');
