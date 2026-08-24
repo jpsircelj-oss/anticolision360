@@ -15,7 +15,7 @@
     h=h.replaceAll('V5.5','V5.7');
     h=h.replace(
       'V5.7: cámara aclarada 27 %, recuadros verde/amarillo/rojo, destello y alarma solo en rojo, líneas blancas desde 5 km/h.',
-      'V5.7: bordes blancos adaptativos por encima del capó, línea media y referencia de posible mano contraria; cámara Android con recuperación automática; destello y alarma solo en rojo.'
+      'V5.7: cámara trasera Android confirmada, bordes blancos adaptativos por encima del capó, línea media y posible mano contraria; destello y alarma solo en rojo.'
     );
     h=h.replace(
       '✓ Bordes blancos de calzada desde 5 km/h<br>',
@@ -24,15 +24,15 @@
     h=h.replace('const ROAD_ROWS=[.88,.78,.68,.59];','const ROAD_ROWS=[.80,.72,.65,.59];');
     h=h.replace(
       "ctx.lineJoin='round';\n    ctx.setLineDash([]);\n\n    const traceSide=points=>{",
-      "ctx.lineJoin='round';\n    ctx.setLineDash([]);\n    // V5.7: no dibujar guías sobre el capó / parte inferior del parabrisas.\n    ctx.beginPath();\n    ctx.rect(0,0,sw,sh*.825);\n    ctx.clip();\n\n    const traceSide=points=>{"
+      "ctx.lineJoin='round';\n    ctx.setLineDash([]);\n    ctx.beginPath();\n    ctx.rect(0,0,sw,sh*.825);\n    ctx.clip();\n\n    const traceSide=points=>{"
     );
     h=h.replace(
       "ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n    ctx.restore();",
-      "ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n\n    // V5.7: referencia visual compacta de la posible mano contraria.\n    const laneRow=1;\n    const laneX=(roadEdges.left.points[laneRow].x+centerPoints[laneRow].x)*.5*sw;\n    const laneY=centerPoints[laneRow].y*sh;\n    ctx.setLineDash([]);\n    ctx.strokeStyle='rgba(255,255,255,.78)';\n    ctx.lineWidth=2.4;\n    ctx.beginPath();\n    ctx.moveTo(laneX,laneY-15); ctx.lineTo(laneX,laneY+9);\n    ctx.moveTo(laneX-6,laneY+2); ctx.lineTo(laneX,laneY+9); ctx.lineTo(laneX+6,laneY+2);\n    ctx.stroke();\n    ctx.font='700 8px system-ui';\n    ctx.textAlign='center';\n    ctx.fillStyle='rgba(255,255,255,.72)';\n    ctx.fillText('POSIBLE MANO CONTRARIA',laneX,laneY-20);\n    ctx.restore();"
+      "ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n\n    const laneRow=1;\n    const laneX=(roadEdges.left.points[laneRow].x+centerPoints[laneRow].x)*.5*sw;\n    const laneY=centerPoints[laneRow].y*sh;\n    ctx.setLineDash([]);\n    ctx.strokeStyle='rgba(255,255,255,.78)';\n    ctx.lineWidth=2.4;\n    ctx.beginPath();\n    ctx.moveTo(laneX,laneY-15); ctx.lineTo(laneX,laneY+9);\n    ctx.moveTo(laneX-6,laneY+2); ctx.lineTo(laneX,laneY+9); ctx.lineTo(laneX+6,laneY+2);\n    ctx.stroke();\n    ctx.font='700 8px system-ui';\n    ctx.textAlign='center';\n    ctx.fillStyle='rgba(255,255,255,.72)';\n    ctx.fillText('POSIBLE MANO CONTRARIA',laneX,laneY-20);\n    ctx.restore();"
     );
 
-    // V5.7: arranque de cámara simplificado para Android/Chrome.
-    // Cada intento tiene tiempo límite para evitar quedar eternamente en TRASERA…
+    // Cámara V5.7: usa exactamente la secuencia que funcionó en la prueba real
+    // del teléfono: environment ideal -> environment exact -> video básico.
     const cameraPattern=/  async function startCamera\(\)\{[\s\S]*?\n  \}\n\n  function startGPS\(\)\{/;
     const cameraReplacement=`  async function startCamera(){
     stopCameraStream();
@@ -58,7 +58,7 @@
     cameraState.textContent=wanted==='environment'?'TRASERA…':'FRONTAL…';
     cameraState.className='pill glass warn';
 
-    function gumWithTimeout(videoConstraints,ms=6500){
+    function gumWithTimeout(videoConstraints,ms=7000){
       let expired=false;
       const request=navigator.mediaDevices.getUserMedia({audio:false,video:videoConstraints}).then(s=>{
         if(expired){
@@ -74,60 +74,52 @@
       return Promise.race([request,timeout]);
     }
 
-    async function useCandidate(candidate,label){
-      const track=candidate.getVideoTracks()[0];
-      if(!track) throw new Error('La cámara no entregó video');
-      stream=candidate;
-      video.muted=true;
-      video.autoplay=true;
-      video.playsInline=true;
-      video.setAttribute('playsinline','');
-      video.setAttribute('webkit-playsinline','');
-      video.srcObject=stream;
-
-      await new Promise(resolve=>{
-        let finished=false;
-        const done=()=>{if(finished)return;finished=true;resolve();};
-        video.addEventListener('loadedmetadata',done,{once:true});
-        video.addEventListener('loadeddata',done,{once:true});
-        video.addEventListener('playing',done,{once:true});
-        setTimeout(done,1700);
-        video.play().then(done).catch(()=>{});
-      });
-      try{await video.play();}catch(_e){}
-
-      const settings=track.getSettings?track.getSettings():{};
-      const reported=settings.facingMode||'';
-      facingMode=reported||wanted;
-      activeCameraInfo={requested:wanted,inferred:facingMode,label:track.label||label,settings,verified:!!reported};
-      cameraState.textContent=wanted==='environment'?(reported==='environment'?'TRASERA ✓':'TRASERA'):(reported==='user'?'FRONTAL ✓':'FRONTAL');
-      cameraState.className='pill glass ok';
-      cameraError='';
-      statusText.textContent='Cámara activa. V5.7 lista.';
-      try{updateCameraZoom();}catch(_e){}
-      cameraLog('V5.7 cámara activa: '+(track.label||label));
-      return true;
-    }
-
     let lastErr=null;
-    const attempts=wanted==='environment' ? [
-      {name:'trasera preferida',constraints:{facingMode:{ideal:'environment'}}},
-      {name:'cámara básica',constraints:true}
-    ] : [
-      {name:'frontal preferida',constraints:{facingMode:{ideal:'user'}}},
-      {name:'cámara básica',constraints:true}
+    const tries=[
+      {name:'facing ideal',c:{facingMode:{ideal:wanted}}},
+      {name:'facing exact',c:{facingMode:{exact:wanted}}},
+      {name:'video básico',c:true}
     ];
 
-    for(const a of attempts){
+    for(const t of tries){
       let candidate=null;
       try{
-        cameraLog('V5.7 intento: '+a.name);
-        candidate=await gumWithTimeout(a.constraints);
-        return await useCandidate(candidate,a.name);
+        cameraLog('V5.7 intento: '+t.name);
+        candidate=await gumWithTimeout(t.c);
+        const track=candidate.getVideoTracks()[0];
+        if(!track) throw new Error('No se recibió pista de video');
+
+        stream=candidate;
+        video.srcObject=stream;
+        video.muted=true;
+        video.autoplay=true;
+        video.playsInline=true;
+        video.setAttribute('playsinline','');
+        video.setAttribute('webkit-playsinline','');
+        await video.play();
+        await new Promise(r=>setTimeout(r,500));
+
+        const settings=track.getSettings?track.getSettings():{};
+        const reported=settings.facingMode||wanted;
+        facingMode=reported;
+        activeCameraInfo={
+          requested:wanted,
+          inferred:reported,
+          label:track.label||t.name,
+          settings,
+          verified:!!settings.facingMode
+        };
+        cameraError='';
+        cameraState.textContent=wanted==='environment'?'TRASERA ✓':'FRONTAL ✓';
+        cameraState.className='pill glass ok';
+        statusText.textContent='Cámara activa. V5.7 lista.';
+        try{updateCameraZoom();}catch(_e){}
+        cameraLog('V5.7 cámara activa: '+(track.label||t.name));
+        return true;
       }catch(err){
         lastErr=err;
-        cameraLog('V5.7 falló '+a.name+': '+(err.name||'Error')+': '+(err.message||err));
-        if(candidate){try{candidate.getTracks().forEach(t=>t.stop());}catch(_e){}}
+        cameraLog('V5.7 falló '+t.name+': '+(err.name||'Error')+': '+(err.message||err));
+        if(candidate){try{candidate.getTracks().forEach(x=>x.stop());}catch(_e){}}
         if(stream===candidate){stream=null;video.srcObject=null;}
       }
     }
@@ -135,7 +127,7 @@
     cameraError=lastErr?(lastErr.name||'Error')+': '+(lastErr.message||lastErr):'No se encontró cámara';
     cameraState.textContent='CAM ✕';
     cameraState.className='pill glass danger';
-    statusText.textContent='Cámara bloqueada. Tocá el candado/ajustes del sitio y permití Cámara para github.io.';
+    statusText.textContent='No se pudo abrir la cámara.';
     return false;
   }
 
@@ -143,6 +135,48 @@
 
     if(!cameraPattern.test(h)) throw new Error('No se encontró el bloque de cámara de base');
     h=h.replace(cameraPattern,cameraReplacement);
+
+    // En V5.7 la cámara se abre PRIMERO. Sólo después arrancan audio, sensores,
+    // GPS e IA. Así evitamos que otra inicialización compita con getUserMedia.
+    const startPattern=/  async function startAll\(\)\{[\s\S]*?\n  \}\n\n  document\.getElementById\('startBtn'\)\.addEventListener\('click',startAll\);/;
+    const startReplacement=`  async function startAll(){
+    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
+      const secureUrl='https://jpsircelj-oss.github.io/anticolision360/v57.html';
+      const description=startScreen.querySelector('.startBox p');
+      description.textContent='La cámara trasera requiere abrir AntiColisión 360 desde GitHub Pages por HTTPS.';
+      description.style.color='#ffd35a';
+      const startBtn=document.getElementById('startBtn');
+      startBtn.textContent='ABRIR PÁGINA SEGURA';
+      startBtn.onclick=()=>{window.location.href=secureUrl;};
+      return;
+    }
+
+    facingMode='environment';
+    startScreen.style.display='none';
+    hud.style.display='block';
+
+    const cameraOK=await startCamera();
+    if(!cameraOK) return;
+
+    try{
+      await activateAudio();
+      updateSoundButton();
+    }catch(_e){}
+    try{
+      await requestSensorPermissionIfNeeded();
+      startSensors();
+    }catch(err){
+      sensorError=(err.name||'Error')+': '+(err.message||err);
+    }
+    startGPS();
+    draw();
+    loadAI();
+  }
+
+  document.getElementById('startBtn').addEventListener('click',startAll);`;
+
+    if(!startPattern.test(h)) throw new Error('No se encontró el arranque principal de base');
+    h=h.replace(startPattern,startReplacement);
 
     document.open();
     document.write(h);
