@@ -1,18 +1,143 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>AntiColisión 360 — V5.7</title></head>
-<body style="margin:0;background:#02050a;color:white;font-family:system-ui"><div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">Cargando AntiColisión 360 V5.7…</div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>AntiColisión 360 — V5.7</title>
+</head>
+<body style="margin:0;background:#02050a;color:white;font-family:system-ui">
+<div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">Cargando AntiColisión 360 V5.7…</div>
 <script>
 (async()=>{
   try{
     let h=await (await fetch('./index.html?v57='+Date.now(),{cache:'no-store'})).text();
+
     h=h.replaceAll('V5.5','V5.7');
-    h=h.replace('V5.7: cámara aclarada 27 %, recuadros verde/amarillo/rojo, destello y alarma solo en rojo, líneas blancas desde 5 km/h.','V5.7: bordes blancos adaptativos por encima del capó, línea media y referencia de posible mano contraria; destello y alarma solo en rojo.');
-    h=h.replace('✓ Bordes blancos de calzada desde 5 km/h<br>','✓ Bordes blancos adaptativos por encima del capó desde 5 km/h<br>\n        ✓ Línea media de la calzada<br>\n        ✓ Referencia de posible mano contraria<br>');
+    h=h.replace(
+      'V5.7: cámara aclarada 27 %, recuadros verde/amarillo/rojo, destello y alarma solo en rojo, líneas blancas desde 5 km/h.',
+      'V5.7: bordes blancos adaptativos por encima del capó, línea media y referencia de posible mano contraria; cámara Android reforzada; destello y alarma solo en rojo.'
+    );
+    h=h.replace(
+      '✓ Bordes blancos de calzada desde 5 km/h<br>',
+      '✓ Bordes blancos adaptativos por encima del capó desde 5 km/h<br>\n        ✓ Línea media de la calzada<br>\n        ✓ Referencia de posible mano contraria<br>'
+    );
     h=h.replace('const ROAD_ROWS=[.88,.78,.68,.59];','const ROAD_ROWS=[.80,.72,.65,.59];');
-    h=h.replace("ctx.lineJoin='round';\n    ctx.setLineDash([]);\n\n    const traceSide=points=>{","ctx.lineJoin='round';\n    ctx.setLineDash([]);\n    // V5.7: no dibujar guías sobre el capó / parte inferior del parabrisas.\n    ctx.beginPath();\n    ctx.rect(0,0,sw,sh*.825);\n    ctx.clip();\n\n    const traceSide=points=>{");
-    h=h.replace("ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n    ctx.restore();","ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n\n    // V5.7: referencia visual compacta de la posible mano contraria.\n    // Se muestra sólo cuando los dos bordes de la calzada fueron detectados.\n    const laneRow=1;\n    const laneX=(roadEdges.left.points[laneRow].x+centerPoints[laneRow].x)*.5*sw;\n    const laneY=centerPoints[laneRow].y*sh;\n    ctx.setLineDash([]);\n    ctx.strokeStyle='rgba(255,255,255,.78)';\n    ctx.lineWidth=2.4;\n    ctx.beginPath();\n    ctx.moveTo(laneX,laneY-15); ctx.lineTo(laneX,laneY+9);\n    ctx.moveTo(laneX-6,laneY+2); ctx.lineTo(laneX,laneY+9); ctx.lineTo(laneX+6,laneY+2);\n    ctx.stroke();\n    ctx.font='700 8px system-ui';\n    ctx.textAlign='center';\n    ctx.fillStyle='rgba(255,255,255,.72)';\n    ctx.fillText('POSIBLE MANO CONTRARIA',laneX,laneY-20);\n    ctx.restore();");
-    document.open();document.write(h);document.close();
-  }catch(e){document.getElementById('loading').textContent='No se pudo cargar V5.7: '+e.message;}
+    h=h.replace(
+      "ctx.lineJoin='round';\n    ctx.setLineDash([]);\n\n    const traceSide=points=>{",
+      "ctx.lineJoin='round';\n    ctx.setLineDash([]);\n    // V5.7: no dibujar guías sobre el capó / parte inferior del parabrisas.\n    ctx.beginPath();\n    ctx.rect(0,0,sw,sh*.825);\n    ctx.clip();\n\n    const traceSide=points=>{"
+    );
+    h=h.replace(
+      "ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n    ctx.restore();",
+      "ctx.beginPath();\n    traceSide(centerPoints);\n    ctx.stroke();\n\n    // V5.7: referencia visual compacta de la posible mano contraria.\n    // Se muestra sólo cuando los dos bordes de la calzada fueron detectados.\n    const laneRow=1;\n    const laneX=(roadEdges.left.points[laneRow].x+centerPoints[laneRow].x)*.5*sw;\n    const laneY=centerPoints[laneRow].y*sh;\n    ctx.setLineDash([]);\n    ctx.strokeStyle='rgba(255,255,255,.78)';\n    ctx.lineWidth=2.4;\n    ctx.beginPath();\n    ctx.moveTo(laneX,laneY-15); ctx.lineTo(laneX,laneY+9);\n    ctx.moveTo(laneX-6,laneY+2); ctx.lineTo(laneX,laneY+9); ctx.lineTo(laneX+6,laneY+2);\n    ctx.stroke();\n    ctx.font='700 8px system-ui';\n    ctx.textAlign='center';\n    ctx.fillStyle='rgba(255,255,255,.72)';\n    ctx.fillText('POSIBLE MANO CONTRARIA',laneX,laneY-20);\n    ctx.restore();"
+    );
+
+    // V5.7 cámara: reemplaza la secuencia compleja de selección por una apertura
+    // más compatible con Chrome/Android. Primero pide la cámara trasera con
+    // facingMode ideal; si Android no la entrega, usa dos alternativas simples.
+    const cameraPattern=/  async function startCamera\(\)\{[\s\S]*?\n  \}\n\n  function startGPS\(\)\{/;
+    const cameraReplacement=`  async function startCamera(){
+    stopCameraStream();
+    activeCameraInfo=null;
+    cameraAttemptLog=[];
+
+    if(!window.isSecureContext){
+      cameraError='La cámara requiere un contexto seguro (HTTPS)';
+      cameraState.textContent='CAM ✕';
+      cameraState.className='pill glass danger';
+      statusText.textContent='Abrí AntiColisión 360 desde GitHub Pages por HTTPS.';
+      return;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      cameraError='getUserMedia no disponible';
+      cameraState.textContent='CAM ✕';
+      cameraState.className='pill glass danger';
+      statusText.textContent='Este navegador no permite acceder a la cámara.';
+      return;
+    }
+
+    const wanted=facingMode==='user'?'user':'environment';
+    cameraState.textContent=wanted==='environment'?'TRASERA…':'FRONTAL…';
+    cameraState.className='pill glass warn';
+    let lastErr=null;
+    const attempts=[
+      {label:'facingMode ideal',video:{facingMode:{ideal:wanted},width:{ideal:1280},height:{ideal:720}}},
+      {label:'facingMode simple',video:{facingMode:wanted}},
+      {label:'video básico',video:true}
+    ];
+
+    for(const attempt of attempts){
+      let candidate=null;
+      try{
+        cameraLog('Intento V5.7: '+attempt.label+' / '+wanted);
+        candidate=await navigator.mediaDevices.getUserMedia({audio:false,video:attempt.video});
+        const track=candidate.getVideoTracks()[0];
+        if(!track) throw new Error('La cámara no entregó una pista de video');
+
+        stream=candidate;
+        video.muted=true;
+        video.autoplay=true;
+        video.playsInline=true;
+        video.setAttribute('playsinline','');
+        video.setAttribute('webkit-playsinline','');
+        video.srcObject=stream;
+
+        try{ await video.play(); }catch(playErr){ cameraLog('play inicial: '+(playErr.message||playErr)); }
+        await new Promise(resolve=>{
+          if(video.readyState>=2 && video.videoWidth>0){ resolve(); return; }
+          let done=false;
+          const finish=()=>{ if(done) return; done=true; resolve(); };
+          video.addEventListener('loadeddata',finish,{once:true});
+          video.addEventListener('playing',finish,{once:true});
+          setTimeout(finish,1800);
+        });
+        try{ await video.play(); }catch(_e){}
+
+        const settings=track.getSettings?track.getSettings():{};
+        const reportedFacing=settings.facingMode||wanted;
+        activeCameraInfo={
+          wanted,
+          verified:reportedFacing===wanted,
+          reportedFacing,
+          label:track.label||'',
+          deviceId:settings.deviceId||'',
+          settings
+        };
+        cameraError='';
+        if(wanted==='environment'){
+          cameraState.textContent=reportedFacing==='environment'?'TRASERA ✓':'TRASERA ?';
+        }else{
+          cameraState.textContent=reportedFacing==='user'?'FRONTAL ✓':'FRONTAL ?';
+        }
+        cameraState.className='pill glass ok';
+        statusText.textContent='Cámara activa. V5.7 lista para detectar.';
+        cameraLog('Cámara V5.7 activa: '+(track.label||reportedFacing||attempt.label));
+        return;
+      }catch(err){
+        lastErr=err;
+        cameraLog('Falló '+attempt.label+': '+(err.name||'Error')+': '+(err.message||err));
+        if(candidate){ try{ candidate.getTracks().forEach(t=>t.stop()); }catch(_e){} }
+        if(stream===candidate){ stream=null; video.srcObject=null; }
+      }
+    }
+
+    cameraError=lastErr ? (lastErr.name||'Error')+': '+(lastErr.message||lastErr) : 'No se encontró una cámara disponible';
+    cameraState.textContent='CAM ✕';
+    cameraState.className='pill glass danger';
+    statusText.textContent='No se pudo abrir la cámara. Revisá el permiso de Cámara para Chrome.';
+  }
+
+  function startGPS(){`;
+
+    if(!cameraPattern.test(h)) throw new Error('No se encontró el bloque de cámara para aplicar la corrección V5.7');
+    h=h.replace(cameraPattern,cameraReplacement);
+
+    document.open();
+    document.write(h);
+    document.close();
+  }catch(e){
+    document.getElementById('loading').textContent='No se pudo cargar V5.7: '+e.message;
+  }
 })();
-</script></body></html>
+</script>
+</body>
+</html>
