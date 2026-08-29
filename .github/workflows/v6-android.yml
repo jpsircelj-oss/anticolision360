@@ -1,11 +1,6 @@
 name: Build AntiColision 360 V6 Android
 
 on:
-  push:
-    branches: [v6-native]
-    paths:
-      - 'android-v6/**'
-      - '.github/workflows/v6-android.yml'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +16,7 @@ jobs:
       - name: Expand V6 source
         run: |
           mkdir -p android-v6
-          base64 -d android-v6/source.tgz.b64 > /tmp/ac360-v6-source.tgz
+          cat android-v6/source.part*.b64 | base64 -d > /tmp/ac360-v6-source.tgz
           tar -xzf /tmp/ac360-v6-source.tgz -C android-v6
 
       - name: Java 17
