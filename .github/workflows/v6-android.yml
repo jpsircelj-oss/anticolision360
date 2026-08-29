@@ -1,11 +1,6 @@
 name: Build AntiColision 360 V6 Android
 
 on:
-  push:
-    branches: [v6-native]
-    paths:
-      - 'android-v6/**'
-      - '.github/workflows/v6-android.yml'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +16,7 @@ jobs:
       - name: Expand V6 source
         run: |
           mkdir -p android-v6
-          cat android-v6/source.part*.b64 | base64 -d > /tmp/ac360-v6-source.tgz
+          cat android-v6/source.part00.b64 android-v6/source.part01.b64 | base64 -d > /tmp/ac360-v6-source.tgz
           tar -xzf /tmp/ac360-v6-source.tgz -C android-v6
 
       - name: Java 17
@@ -54,26 +49,26 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp android-v6/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha1.apk
-          sha256sum AntiColision360-V6.0-alpha1.apk
+          cp android-v6/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha2.apk
+          sha256sum AntiColision360-V6.0-alpha2.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha1
-          path: AntiColision360-V6.0-alpha1.apk
+          name: AntiColision360-V6.0-alpha2
+          path: AntiColision360-V6.0-alpha2.apk
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha1
+          TAG: v6.0-alpha2
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha1.apk --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha2.apk --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha1.apk \
+            gh release create "$TAG" AntiColision360-V6.0-alpha2.apk \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 alpha 1' \
-              --notes 'Primera APK nativa: cámara trasera, GPS/IMU, carril, EfficientDet-Lite0, prioridad VRU y posición izquierda/adelante/derecha.' \
+              --title 'AntiColisión 360 V6.0 alpha 2' \
+              --notes 'Arranque seguro: la app abre primero sin cámara, IA ni GPS. Los módulos se activan al tocar INICIAR CÁMARA, con diagnóstico visible de errores.' \
               --prerelease
           fi
