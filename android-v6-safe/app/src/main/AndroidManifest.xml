@@ -2,10 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="false"
-        android:label="AntiColisión 360 V6 Alpha 2"
-        android:theme="@style/AppTheme">
+        android:label="AntiColisión 360 V6 Alpha 2.1">
         <activity
-            android:name=".MainActivity"
+            android:name="com.anticolision360.v6safe.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
