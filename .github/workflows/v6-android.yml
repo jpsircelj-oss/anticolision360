@@ -52,29 +52,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha6.apk
-          zip -j AntiColision360-V6.0-alpha6.zip AntiColision360-V6.0-alpha6.apk
-          sha256sum AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha7.apk
+          zip -j AntiColision360-V6.0-alpha7.zip AntiColision360-V6.0-alpha7.apk
+          sha256sum AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha6
+          name: AntiColision360-V6.0-alpha7
           path: |
-            AntiColision360-V6.0-alpha6.apk
-            AntiColision360-V6.0-alpha6.zip
+            AntiColision360-V6.0-alpha7.apk
+            AntiColision360-V6.0-alpha7.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha6
+          TAG: v6.0-alpha7
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 6' \
-              --notes 'Cámara + GPS/IMU + IA con seguimiento temporal. Estabiliza etiquetas, exige persistencia mínima y clasifica objetos como IZQUIERDA, ADELANTE o DERECHA respecto del eje de cámara. Sin alertas ni cálculo de riesgo todavía.' \
+              --title 'AntiColisión 360 V6.0 Alpha 7' \
+              --notes 'Cámara + GPS/IMU + IA + tracking. Filtra detecciones contenidas dentro de TV/laptop para reducir falsos peatones de pantallas, usa etiquetas cortas separadas y endurece la asociación temporal de T#.' \
               --prerelease
           fi
