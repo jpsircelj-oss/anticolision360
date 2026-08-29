@@ -3,7 +3,10 @@ package com.anticolision360.v6safe;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -13,11 +16,14 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.activity.ComponentActivity;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
@@ -25,13 +31,28 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.tensorflow.lite.support.image.ImageProcessor;
+import org.tensorflow.lite.support.image.TensorImage;
+import org.tensorflow.lite.support.image.ops.Rot90Op;
+import org.tensorflow.lite.support.label.Category;
+import org.tensorflow.lite.task.vision.detector.Detection;
+import org.tensorflow.lite.task.vision.detector.ObjectDetector;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends ComponentActivity implements SensorEventListener, LocationListener {
     private static final int REQ_CAMERA = 31;
     private static final int REQ_LOCATION = 32;
+    private static final long MIN_INFERENCE_INTERVAL_NS = 180_000_000L;
 
     private PreviewView previewView;
+    private DetectionOverlay overlayView;
     private TextView statusView;
     private TextView telemetryView;
 
@@ -41,6 +62,12 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
     private Sensor linearAccelerationSensor;
     private Sensor accelerometerSensor;
     private Sensor gyroscopeSensor;
+
+    private ExecutorService cameraExecutor;
+    private ObjectDetector objectDetector;
+    private android.graphics.Bitmap bitmapBuffer;
+    private long lastInferenceNs = 0L;
+    private boolean detectorReady = false;
 
     private double gpsSpeedKmh = 0.0;
     private float gpsBearing = Float.NaN;
@@ -64,13 +91,18 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
+        overlayView = new DetectionOverlay(this);
+        root.addView(overlayView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
         statusView = new TextView(this);
-        statusView.setText("AntiColisión 360 V6 Alpha 4\nPreparando cámara + GPS + IMU…");
+        statusView.setText("AntiColisión 360 V6 Alpha 5\nPreparando cámara + GPS/IMU + IA…");
         statusView.setTextColor(Color.WHITE);
-        statusView.setTextSize(17f);
+        statusView.setTextSize(16f);
         statusView.setGravity(Gravity.CENTER);
         statusView.setBackgroundColor(0x99000000);
-        statusView.setPadding(24, 18, 24, 18);
+        statusView.setPadding(20, 14, 20, 14);
         FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
@@ -79,10 +111,10 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
 
         telemetryView = new TextView(this);
         telemetryView.setTextColor(Color.WHITE);
-        telemetryView.setTextSize(16f);
+        telemetryView.setTextSize(15f);
         telemetryView.setGravity(Gravity.CENTER);
         telemetryView.setBackgroundColor(0xAA000000);
-        telemetryView.setPadding(20, 16, 20, 16);
+        telemetryView.setPadding(18, 14, 18, 14);
         FrameLayout.LayoutParams telemetryParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT);
@@ -91,9 +123,11 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
 
         setContentView(root);
 
+        cameraExecutor = Executors.newSingleThreadExecutor();
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         configureSensors();
+        initializeDetector();
         updateTelemetry();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -110,6 +144,24 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
             }, REQ_LOCATION);
+        }
+    }
+
+    private void initializeDetector() {
+        try {
+            ObjectDetector.ObjectDetectorOptions options =
+                    ObjectDetector.ObjectDetectorOptions.builder()
+                            .setScoreThreshold(0.30f)
+                            .setMaxResults(12)
+                            .build();
+            objectDetector = ObjectDetector.createFromFileAndOptions(
+                    this,
+                    "efficientdet_lite0.tflite",
+                    options);
+            detectorReady = true;
+        } catch (Throwable t) {
+            detectorReady = false;
+            statusView.setText("IA NO DISPONIBLE · " + t.getClass().getSimpleName());
         }
     }
 
@@ -139,6 +191,12 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
             } catch (SecurityException ignored) {
             }
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (cameraExecutor != null) cameraExecutor.shutdownNow();
     }
 
     private void registerSensors() {
@@ -210,16 +268,109 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
         future.addListener(() -> {
             try {
                 ProcessCameraProvider provider = future.get();
+
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
+                ImageAnalysis analysis = new ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                        .build();
+                analysis.setAnalyzer(cameraExecutor, this::analyzeFrame);
+
                 provider.unbindAll();
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview);
-                statusView.setText("CÁMARA ✓   GPS/IMU ✓   ·   V6 ALPHA 4");
+                provider.bindToLifecycle(
+                        this,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis);
+
+                statusView.setText(detectorReady
+                        ? "CÁMARA ✓   GPS/IMU ✓   IA ✓   ·   V6 ALPHA 5"
+                        : "CÁMARA ✓   GPS/IMU ✓   IA —   ·   V6 ALPHA 5");
             } catch (Throwable t) {
                 statusView.setText("ERROR DE CÁMARA\n" + t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage()));
             }
         }, ContextCompat.getMainExecutor(this));
+    }
+
+    private void analyzeFrame(ImageProxy image) {
+        try {
+            if (!detectorReady || objectDetector == null) return;
+
+            long now = System.nanoTime();
+            if (now - lastInferenceNs < MIN_INFERENCE_INTERVAL_NS) return;
+            lastInferenceNs = now;
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+            if (bitmapBuffer == null || bitmapBuffer.getWidth() != width || bitmapBuffer.getHeight() != height) {
+                bitmapBuffer = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
+            }
+
+            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+            buffer.rewind();
+            bitmapBuffer.copyPixelsFromBuffer(buffer);
+
+            int rotationDegrees = image.getImageInfo().getRotationDegrees();
+            ImageProcessor processor = new ImageProcessor.Builder()
+                    .add(new Rot90Op(-rotationDegrees / 90))
+                    .build();
+            TensorImage tensorImage = processor.process(TensorImage.fromBitmap(bitmapBuffer));
+
+            long startMs = System.currentTimeMillis();
+            List<Detection> detections = objectDetector.detect(tensorImage);
+            long inferenceMs = System.currentTimeMillis() - startMs;
+
+            List<OverlayBox> boxes = new ArrayList<>();
+            for (Detection detection : detections) {
+                if (detection.getCategories() == null || detection.getCategories().isEmpty()) continue;
+                Category category = detection.getCategories().get(0);
+                String translated = translateTargetLabel(category.getLabel());
+                if (translated == null) continue;
+
+                String raw = category.getLabel() == null ? "" : category.getLabel().toLowerCase(Locale.US);
+                boolean vulnerable = raw.equals("person") || raw.equals("bicycle") || raw.equals("motorcycle");
+                boxes.add(new OverlayBox(
+                        new RectF(detection.getBoundingBox()),
+                        translated,
+                        category.getScore(),
+                        vulnerable));
+            }
+
+            Collections.sort(boxes, (a, b) -> {
+                if (a.vulnerable != b.vulnerable) return a.vulnerable ? -1 : 1;
+                return Float.compare(b.score, a.score);
+            });
+
+            int sourceWidth = tensorImage.getWidth();
+            int sourceHeight = tensorImage.getHeight();
+            runOnUiThread(() -> {
+                overlayView.setResults(boxes, sourceWidth, sourceHeight);
+                statusView.setText(String.format(Locale.US,
+                        "CÁMARA ✓   GPS/IMU ✓   IA ✓   ·   %d obj   ·   %d ms   ·   V6 ALPHA 5",
+                        boxes.size(),
+                        inferenceMs));
+            });
+        } catch (Throwable t) {
+            runOnUiThread(() -> statusView.setText(
+                    "IA ERROR · " + t.getClass().getSimpleName() + " · V6 ALPHA 5"));
+        } finally {
+            image.close();
+        }
+    }
+
+    private static String translateTargetLabel(String label) {
+        if (label == null) return null;
+        switch (label.toLowerCase(Locale.US)) {
+            case "person": return "PEATÓN";
+            case "bicycle": return "BICICLETA";
+            case "motorcycle": return "MOTOCICLETA";
+            case "car": return "AUTO";
+            case "bus": return "BUS";
+            case "truck": return "CAMIÓN";
+            default: return null;
+        }
     }
 
     @Override
@@ -304,5 +455,91 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
         String[] directions = {"N", "NE", "E", "SE", "S", "SO", "O", "NO"};
         int index = Math.round(((bearing % 360f) / 45f)) % 8;
         return directions[index];
+    }
+
+    private static final class OverlayBox {
+        final RectF box;
+        final String label;
+        final float score;
+        final boolean vulnerable;
+
+        OverlayBox(RectF box, String label, float score, boolean vulnerable) {
+            this.box = box;
+            this.label = label;
+            this.score = score;
+            this.vulnerable = vulnerable;
+        }
+    }
+
+    private static final class DetectionOverlay extends View {
+        private final Paint normalPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint vulnerablePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        private List<OverlayBox> boxes = Collections.emptyList();
+        private int sourceWidth = 1;
+        private int sourceHeight = 1;
+
+        DetectionOverlay(Context context) {
+            super(context);
+            setWillNotDraw(false);
+
+            normalPaint.setStyle(Paint.Style.STROKE);
+            normalPaint.setStrokeWidth(5f);
+            normalPaint.setColor(Color.CYAN);
+
+            vulnerablePaint.setStyle(Paint.Style.STROKE);
+            vulnerablePaint.setStrokeWidth(8f);
+            vulnerablePaint.setColor(Color.YELLOW);
+
+            textPaint.setColor(Color.BLACK);
+            textPaint.setTextSize(32f);
+            textPaint.setFakeBoldText(true);
+
+            textBackgroundPaint.setStyle(Paint.Style.FILL);
+        }
+
+        void setResults(List<OverlayBox> newBoxes, int width, int height) {
+            boxes = new ArrayList<>(newBoxes);
+            sourceWidth = Math.max(1, width);
+            sourceHeight = Math.max(1, height);
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            if (boxes.isEmpty()) return;
+
+            float scale = Math.max(
+                    getWidth() / (float) sourceWidth,
+                    getHeight() / (float) sourceHeight);
+            float dx = (getWidth() - sourceWidth * scale) * 0.5f;
+            float dy = (getHeight() - sourceHeight * scale) * 0.5f;
+
+            for (OverlayBox item : boxes) {
+                RectF r = new RectF(
+                        item.box.left * scale + dx,
+                        item.box.top * scale + dy,
+                        item.box.right * scale + dx,
+                        item.box.bottom * scale + dy);
+
+                Paint boxPaint = item.vulnerable ? vulnerablePaint : normalPaint;
+                canvas.drawRect(r, boxPaint);
+
+                String label = (item.vulnerable ? "★ " : "")
+                        + item.label
+                        + String.format(Locale.US, " %.0f%%", item.score * 100f);
+                float textWidth = textPaint.measureText(label);
+                float textHeight = textPaint.getTextSize() + 12f;
+                float top = Math.max(0f, r.top - textHeight);
+                float right = Math.min(getWidth(), r.left + textWidth + 18f);
+
+                textBackgroundPaint.setColor(item.vulnerable ? Color.YELLOW : Color.CYAN);
+                canvas.drawRect(r.left, top, right, top + textHeight, textBackgroundPaint);
+                canvas.drawText(label, r.left + 9f, top + textPaint.getTextSize(), textPaint);
+            }
+        }
     }
 }
