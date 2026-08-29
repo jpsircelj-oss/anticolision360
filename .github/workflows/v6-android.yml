@@ -40,26 +40,26 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha2.apk
-          sha256sum AntiColision360-V6.0-alpha2.apk
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha2.1.apk
+          sha256sum AntiColision360-V6.0-alpha2.1.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha2
-          path: AntiColision360-V6.0-alpha2.apk
+          name: AntiColision360-V6.0-alpha2.1
+          path: AntiColision360-V6.0-alpha2.1.apk
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha2
+          TAG: v6.0-alpha2.1
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha2.apk --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha2.1.apk --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha2.apk \
+            gh release create "$TAG" AntiColision360-V6.0-alpha2.1.apk \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 alpha 2' \
-              --notes 'APK mínima de diagnóstico. Debe abrir una pantalla ARRANQUE SEGURO sin cámara, GPS, audio ni IA. Sirve para validar compatibilidad nativa antes de agregar módulos.' \
+              --title 'AntiColisión 360 V6.0 alpha 2.1' \
+              --notes 'Diagnóstico Android básico: sin pantalla completa, sin tema personalizado, sin cámara, GPS, audio ni IA. Actividad de inicio explícita.' \
               --prerelease
           fi
