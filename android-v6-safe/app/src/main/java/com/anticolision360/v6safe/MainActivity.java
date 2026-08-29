@@ -41,8 +41,11 @@ import org.tensorflow.lite.task.vision.detector.ObjectDetector;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -68,6 +71,7 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
     private android.graphics.Bitmap bitmapBuffer;
     private long lastInferenceNs = 0L;
     private boolean detectorReady = false;
+    private final TemporalTracker temporalTracker = new TemporalTracker();
 
     private double gpsSpeedKmh = 0.0;
     private float gpsBearing = Float.NaN;
@@ -97,7 +101,7 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
         statusView = new TextView(this);
-        statusView.setText("AntiColisión 360 V6 Alpha 5\nPreparando cámara + GPS/IMU + IA…");
+        statusView.setText("AntiColisión 360 V6 Alpha 6\nPreparando seguimiento temporal…");
         statusView.setTextColor(Color.WHITE);
         statusView.setTextSize(16f);
         statusView.setGravity(Gravity.CENTER);
@@ -151,8 +155,8 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
         try {
             ObjectDetector.ObjectDetectorOptions options =
                     ObjectDetector.ObjectDetectorOptions.builder()
-                            .setScoreThreshold(0.30f)
-                            .setMaxResults(12)
+                            .setScoreThreshold(0.28f)
+                            .setMaxResults(16)
                             .build();
             objectDetector = ObjectDetector.createFromFileAndOptions(
                     this,
@@ -286,8 +290,8 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
                         analysis);
 
                 statusView.setText(detectorReady
-                        ? "CÁMARA ✓   GPS/IMU ✓   IA ✓   ·   V6 ALPHA 5"
-                        : "CÁMARA ✓   GPS/IMU ✓   IA —   ·   V6 ALPHA 5");
+                        ? "CÁMARA ✓   GPS/IMU ✓   IA ✓   TRACK ✓   ·   V6 ALPHA 6"
+                        : "CÁMARA ✓   GPS/IMU ✓   IA —   ·   V6 ALPHA 6");
             } catch (Throwable t) {
                 statusView.setText("ERROR DE CÁMARA\n" + t.getClass().getSimpleName() + ": " + String.valueOf(t.getMessage()));
             }
@@ -322,7 +326,7 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
             List<Detection> detections = objectDetector.detect(tensorImage);
             long inferenceMs = System.currentTimeMillis() - startMs;
 
-            List<OverlayBox> boxes = new ArrayList<>();
+            List<RawBox> rawBoxes = new ArrayList<>();
             for (Detection detection : detections) {
                 if (detection.getCategories() == null || detection.getCategories().isEmpty()) continue;
                 Category category = detection.getCategories().get(0);
@@ -331,30 +335,37 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
 
                 String raw = category.getLabel() == null ? "" : category.getLabel().toLowerCase(Locale.US);
                 boolean vulnerable = raw.equals("person") || raw.equals("bicycle") || raw.equals("motorcycle");
-                boxes.add(new OverlayBox(
+                rawBoxes.add(new RawBox(
                         new RectF(detection.getBoundingBox()),
                         translated,
                         category.getScore(),
                         vulnerable));
             }
 
-            Collections.sort(boxes, (a, b) -> {
+            int sourceWidth = tensorImage.getWidth();
+            int sourceHeight = tensorImage.getHeight();
+            List<TrackedBox> trackedBoxes = temporalTracker.update(rawBoxes, sourceWidth, sourceHeight);
+
+            Collections.sort(trackedBoxes, (a, b) -> {
                 if (a.vulnerable != b.vulnerable) return a.vulnerable ? -1 : 1;
+                if (!a.position.equals(b.position)) {
+                    if (a.position.equals("ADELANTE")) return -1;
+                    if (b.position.equals("ADELANTE")) return 1;
+                }
                 return Float.compare(b.score, a.score);
             });
 
-            int sourceWidth = tensorImage.getWidth();
-            int sourceHeight = tensorImage.getHeight();
             runOnUiThread(() -> {
-                overlayView.setResults(boxes, sourceWidth, sourceHeight);
+                overlayView.setResults(trackedBoxes, sourceWidth, sourceHeight);
                 statusView.setText(String.format(Locale.US,
-                        "CÁMARA ✓   GPS/IMU ✓   IA ✓   ·   %d obj   ·   %d ms   ·   V6 ALPHA 5",
-                        boxes.size(),
+                        "CÁMARA ✓  GPS/IMU ✓  IA ✓  TRACK ✓  ·  %d raw / %d estables  ·  %d ms  ·  V6 ALPHA 6",
+                        rawBoxes.size(),
+                        trackedBoxes.size(),
                         inferenceMs));
             });
         } catch (Throwable t) {
             runOnUiThread(() -> statusView.setText(
-                    "IA ERROR · " + t.getClass().getSimpleName() + " · V6 ALPHA 5"));
+                    "IA/TRACK ERROR · " + t.getClass().getSimpleName() + " · V6 ALPHA 6"));
         } finally {
             image.close();
         }
@@ -376,15 +387,9 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
     @Override
     public void onLocationChanged(Location location) {
         if (location == null) return;
-        if (location.hasSpeed()) {
-            gpsSpeedKmh = Math.max(0.0, location.getSpeed() * 3.6);
-        }
-        if (location.hasBearing()) {
-            gpsBearing = location.getBearing();
-        }
-        if (location.hasAccuracy()) {
-            gpsAccuracy = location.getAccuracy();
-        }
+        if (location.hasSpeed()) gpsSpeedKmh = Math.max(0.0, location.getSpeed() * 3.6);
+        if (location.hasBearing()) gpsBearing = location.getBearing();
+        if (location.hasAccuracy()) gpsAccuracy = location.getAccuracy();
         gpsActive = true;
         updateTelemetry();
     }
@@ -418,9 +423,7 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
             float y = event.values[1];
             float z = event.values[2];
             float mag = (float) Math.sqrt(x * x + y * y + z * z);
-            if (type == Sensor.TYPE_ACCELEROMETER) {
-                mag = Math.abs(mag - SensorManager.GRAVITY_EARTH);
-            }
+            if (type == Sensor.TYPE_ACCELEROMETER) mag = Math.abs(mag - SensorManager.GRAVITY_EARTH);
             acceleration = 0.82f * acceleration + 0.18f * mag;
         } else if (type == Sensor.TYPE_GYROSCOPE) {
             gyroZ = 0.82f * gyroZ + 0.18f * event.values[2];
@@ -457,88 +460,260 @@ public final class MainActivity extends ComponentActivity implements SensorEvent
         return directions[index];
     }
 
-    private static final class OverlayBox {
-        final RectF box;
+    private static final class RawBox {
+        final RectF rect;
         final String label;
         final float score;
         final boolean vulnerable;
 
-        OverlayBox(RectF box, String label, float score, boolean vulnerable) {
-            this.box = box;
+        RawBox(RectF rect, String label, float score, boolean vulnerable) {
+            this.rect = rect;
             this.label = label;
             this.score = score;
             this.vulnerable = vulnerable;
         }
     }
 
-    private static final class DetectionOverlay extends View {
-        private final Paint normalPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint vulnerablePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint textBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final class TrackedBox {
+        final int id;
+        final RectF rect;
+        final String label;
+        final String position;
+        final float score;
+        final boolean vulnerable;
+        final int hits;
 
-        private List<OverlayBox> boxes = Collections.emptyList();
+        TrackedBox(int id, RectF rect, String label, String position, float score, boolean vulnerable, int hits) {
+            this.id = id;
+            this.rect = rect;
+            this.label = label;
+            this.position = position;
+            this.score = score;
+            this.vulnerable = vulnerable;
+            this.hits = hits;
+        }
+    }
+
+    private static final class Track {
+        final int id;
+        final Map<String, Float> labelVotes = new HashMap<>();
+        RectF rect;
+        String stableLabel;
+        String stablePosition;
+        String candidatePosition;
+        int candidatePositionFrames;
+        float score;
+        int hits;
+        int missed;
+
+        Track(int id, RawBox box, int sourceWidth) {
+            this.id = id;
+            this.rect = new RectF(box.rect);
+            this.stableLabel = box.label;
+            this.score = box.score;
+            this.hits = 1;
+            this.missed = 0;
+            this.stablePosition = relativePosition(this.rect, sourceWidth);
+            this.labelVotes.put(box.label, Math.max(0.01f, box.score));
+        }
+
+        void update(RawBox box, int sourceWidth) {
+            float alpha = iou(rect, box.rect) > 0.30f ? 0.42f : 0.62f;
+            rect.left = blend(rect.left, box.rect.left, alpha);
+            rect.top = blend(rect.top, box.rect.top, alpha);
+            rect.right = blend(rect.right, box.rect.right, alpha);
+            rect.bottom = blend(rect.bottom, box.rect.bottom, alpha);
+            score = 0.62f * score + 0.38f * box.score;
+            hits++;
+            missed = 0;
+
+            for (Map.Entry<String, Float> entry : labelVotes.entrySet()) {
+                entry.setValue(entry.getValue() * 0.84f);
+            }
+            labelVotes.put(box.label, labelVotes.getOrDefault(box.label, 0f) + Math.max(0.05f, box.score));
+
+            String bestLabel = stableLabel;
+            float bestVote = -1f;
+            for (Map.Entry<String, Float> entry : labelVotes.entrySet()) {
+                if (entry.getValue() > bestVote) {
+                    bestVote = entry.getValue();
+                    bestLabel = entry.getKey();
+                }
+            }
+            float currentVote = labelVotes.getOrDefault(stableLabel, 0f);
+            if (bestLabel.equals(stableLabel) || bestVote > currentVote * 1.12f) stableLabel = bestLabel;
+
+            String newPosition = relativePosition(rect, sourceWidth);
+            if (newPosition.equals(stablePosition)) {
+                candidatePosition = null;
+                candidatePositionFrames = 0;
+            } else if (newPosition.equals(candidatePosition)) {
+                candidatePositionFrames++;
+                if (candidatePositionFrames >= 2) {
+                    stablePosition = newPosition;
+                    candidatePosition = null;
+                    candidatePositionFrames = 0;
+                }
+            } else {
+                candidatePosition = newPosition;
+                candidatePositionFrames = 1;
+            }
+        }
+
+        boolean vulnerable() {
+            return stableLabel.equals("PEATÓN") || stableLabel.equals("BICICLETA") || stableLabel.equals("MOTOCICLETA");
+        }
+    }
+
+    private static final class TemporalTracker {
+        private final List<Track> tracks = new ArrayList<>();
+        private int nextId = 1;
+
+        List<TrackedBox> update(List<RawBox> detections, int sourceWidth, int sourceHeight) {
+            int existingCount = tracks.size();
+            boolean[] used = new boolean[existingCount];
+            List<RawBox> ordered = new ArrayList<>(detections);
+            Collections.sort(ordered, (a, b) -> Float.compare(b.score, a.score));
+
+            float diagonal = (float) Math.sqrt((double) sourceWidth * sourceWidth + (double) sourceHeight * sourceHeight);
+            for (RawBox detection : ordered) {
+                int bestIndex = -1;
+                float bestAffinity = 0f;
+                for (int i = 0; i < existingCount; i++) {
+                    if (used[i]) continue;
+                    Track track = tracks.get(i);
+                    float overlap = iou(track.rect, detection.rect);
+                    float centerDistance = centerDistance(track.rect, detection.rect) / Math.max(1f, diagonal);
+                    float proximity = Math.max(0f, 1f - centerDistance * 7f);
+                    float affinity = overlap * 0.78f + proximity * 0.22f;
+                    if ((overlap >= 0.08f || centerDistance <= 0.085f) && affinity > bestAffinity) {
+                        bestAffinity = affinity;
+                        bestIndex = i;
+                    }
+                }
+                if (bestIndex >= 0) {
+                    used[bestIndex] = true;
+                    tracks.get(bestIndex).update(detection, sourceWidth);
+                } else {
+                    tracks.add(new Track(nextId++, detection, sourceWidth));
+                }
+            }
+
+            for (int i = 0; i < existingCount; i++) if (!used[i]) tracks.get(i).missed++;
+            Iterator<Track> iterator = tracks.iterator();
+            while (iterator.hasNext()) if (iterator.next().missed > 3) iterator.remove();
+
+            List<TrackedBox> output = new ArrayList<>();
+            for (Track track : tracks) {
+                if (track.hits < 2 || track.missed > 1) continue;
+                output.add(new TrackedBox(
+                        track.id,
+                        new RectF(track.rect),
+                        track.stableLabel,
+                        track.stablePosition,
+                        track.score,
+                        track.vulnerable(),
+                        track.hits));
+            }
+            return output;
+        }
+    }
+
+    private static float blend(float oldValue, float newValue, float newWeight) {
+        return oldValue * (1f - newWeight) + newValue * newWeight;
+    }
+
+    private static float centerDistance(RectF a, RectF b) {
+        float dx = a.centerX() - b.centerX();
+        float dy = a.centerY() - b.centerY();
+        return (float) Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private static float iou(RectF a, RectF b) {
+        float left = Math.max(a.left, b.left);
+        float top = Math.max(a.top, b.top);
+        float right = Math.min(a.right, b.right);
+        float bottom = Math.min(a.bottom, b.bottom);
+        float intersection = Math.max(0f, right - left) * Math.max(0f, bottom - top);
+        float union = Math.max(0f, a.width()) * Math.max(0f, a.height())
+                + Math.max(0f, b.width()) * Math.max(0f, b.height()) - intersection;
+        return union <= 0f ? 0f : intersection / union;
+    }
+
+    private static String relativePosition(RectF rect, int sourceWidth) {
+        if (sourceWidth <= 0) return "ADELANTE";
+        float left = rect.left / sourceWidth;
+        float right = rect.right / sourceWidth;
+        float center = rect.centerX() / sourceWidth;
+        float width = Math.max(0.01f, right - left);
+        float overlap = Math.max(0f, Math.min(right, 0.66f) - Math.max(left, 0.34f));
+        float overlapFraction = overlap / width;
+        if ((center >= 0.36f && center <= 0.64f) || overlapFraction >= 0.34f) return "ADELANTE";
+        return center < 0.50f ? "IZQUIERDA" : "DERECHA";
+    }
+
+    private static final class DetectionOverlay extends View {
+        private final Paint boxPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private List<TrackedBox> boxes = Collections.emptyList();
         private int sourceWidth = 1;
         private int sourceHeight = 1;
 
         DetectionOverlay(Context context) {
             super(context);
             setWillNotDraw(false);
-
-            normalPaint.setStyle(Paint.Style.STROKE);
-            normalPaint.setStrokeWidth(5f);
-            normalPaint.setColor(Color.CYAN);
-
-            vulnerablePaint.setStyle(Paint.Style.STROKE);
-            vulnerablePaint.setStrokeWidth(8f);
-            vulnerablePaint.setColor(Color.YELLOW);
-
+            boxPaint.setStyle(Paint.Style.STROKE);
+            boxPaint.setStrokeWidth(6f);
             textPaint.setColor(Color.BLACK);
-            textPaint.setTextSize(32f);
+            textPaint.setTextSize(34f);
             textPaint.setFakeBoldText(true);
-
-            textBackgroundPaint.setStyle(Paint.Style.FILL);
+            labelPaint.setStyle(Paint.Style.FILL);
         }
 
-        void setResults(List<OverlayBox> newBoxes, int width, int height) {
-            boxes = new ArrayList<>(newBoxes);
-            sourceWidth = Math.max(1, width);
-            sourceHeight = Math.max(1, height);
+        void setResults(List<TrackedBox> boxes, int sourceWidth, int sourceHeight) {
+            this.boxes = new ArrayList<>(boxes);
+            this.sourceWidth = Math.max(1, sourceWidth);
+            this.sourceHeight = Math.max(1, sourceHeight);
             invalidate();
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (boxes.isEmpty()) return;
-
-            float scale = Math.max(
-                    getWidth() / (float) sourceWidth,
-                    getHeight() / (float) sourceHeight);
+            if (boxes == null || boxes.isEmpty()) return;
+            float scale = Math.max(getWidth() / (float) sourceWidth, getHeight() / (float) sourceHeight);
             float dx = (getWidth() - sourceWidth * scale) * 0.5f;
             float dy = (getHeight() - sourceHeight * scale) * 0.5f;
 
-            for (OverlayBox item : boxes) {
-                RectF r = new RectF(
-                        item.box.left * scale + dx,
-                        item.box.top * scale + dy,
-                        item.box.right * scale + dx,
-                        item.box.bottom * scale + dy);
+            for (TrackedBox box : boxes) {
+                int color = box.vulnerable ? Color.YELLOW : Color.rgb(0, 255, 210);
+                boxPaint.setColor(color);
+                labelPaint.setColor(color);
+                RectF mapped = new RectF(
+                        box.rect.left * scale + dx,
+                        box.rect.top * scale + dy,
+                        box.rect.right * scale + dx,
+                        box.rect.bottom * scale + dy);
+                canvas.drawRect(mapped, boxPaint);
 
-                Paint boxPaint = item.vulnerable ? vulnerablePaint : normalPaint;
-                canvas.drawRect(r, boxPaint);
-
-                String label = (item.vulnerable ? "★ " : "")
-                        + item.label
-                        + String.format(Locale.US, " %.0f%%", item.score * 100f);
-                float textWidth = textPaint.measureText(label);
-                float textHeight = textPaint.getTextSize() + 12f;
-                float top = Math.max(0f, r.top - textHeight);
-                float right = Math.min(getWidth(), r.left + textWidth + 18f);
-
-                textBackgroundPaint.setColor(item.vulnerable ? Color.YELLOW : Color.CYAN);
-                canvas.drawRect(r.left, top, right, top + textHeight, textBackgroundPaint);
-                canvas.drawText(label, r.left + 9f, top + textPaint.getTextSize(), textPaint);
+                String prefix = box.vulnerable ? "★ " : "";
+                String text = String.format(Locale.US,
+                        "%s%s %s %.0f%% · T%d",
+                        prefix,
+                        box.label,
+                        box.position,
+                        box.score * 100f,
+                        box.id);
+                float padding = 10f;
+                float textWidth = textPaint.measureText(text);
+                float labelHeight = textPaint.getTextSize() + 14f;
+                float left = Math.max(0f, mapped.left);
+                float top = Math.max(0f, mapped.top - labelHeight);
+                float right = Math.min(getWidth(), left + textWidth + padding * 2f);
+                RectF labelRect = new RectF(left, top, right, top + labelHeight);
+                canvas.drawRect(labelRect, labelPaint);
+                canvas.drawText(text, left + padding, top + textPaint.getTextSize(), textPaint);
             }
         }
     }
