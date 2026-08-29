@@ -7,7 +7,7 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
-    <application android:allowBackup="false" android:label="AntiColisión 360 V6 Alpha 4">
+    <application android:allowBackup="false" android:label="AntiColisión 360 V6 Alpha 5">
         <activity android:name="com.anticolision360.v6safe.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
