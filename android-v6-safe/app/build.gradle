@@ -1,0 +1,22 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.anticolision360.v6safe'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.anticolision360.v6safe'
+        minSdk 26
+        targetSdk 35
+        versionCode 60002
+        versionName '6.0.0-alpha2'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
