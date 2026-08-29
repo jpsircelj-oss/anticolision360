@@ -1,6 +1,11 @@
 name: Build AntiColision 360 V6 Android
 
 on:
+  push:
+    branches: [v6-native]
+    paths:
+      - 'android-v6/**'
+      - '.github/workflows/v6-android.yml'
   workflow_dispatch:
 
 permissions:
