@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application
-        android:allowBackup="false"
-        android:label="AntiColisión 360 V6 Alpha 2.1">
-        <activity
-            android:name="com.anticolision360.v6safe.MainActivity"
-            android:exported="true">
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
+    <application android:allowBackup="false" android:label="AntiColisión 360 V6 Alpha 3">
+        <activity android:name="com.anticolision360.v6safe.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
