@@ -38,34 +38,43 @@ jobs:
       - name: Restore stable test signing key
         run: base64 -d android-v6-safe/test-signing.keystore.b64 > android-v6-safe/test-signing.keystore
 
+      - name: Download EfficientDet Lite0 model
+        run: |
+          mkdir -p android-v6-safe/app/src/main/assets
+          curl -L --fail --retry 3 \
+            'https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/object_detection/rpi/lite-model_efficientdet_lite0_detection_metadata_1.tflite' \
+            -o android-v6-safe/app/src/main/assets/efficientdet_lite0.tflite
+          test -s android-v6-safe/app/src/main/assets/efficientdet_lite0.tflite
+          ls -lh android-v6-safe/app/src/main/assets/efficientdet_lite0.tflite
+
       - name: Build debug APK
         run: gradle -p android-v6-safe --stacktrace assembleDebug
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha4.apk
-          zip -j AntiColision360-V6.0-alpha4.zip AntiColision360-V6.0-alpha4.apk
-          sha256sum AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha5.apk
+          zip -j AntiColision360-V6.0-alpha5.zip AntiColision360-V6.0-alpha5.apk
+          sha256sum AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha4
+          name: AntiColision360-V6.0-alpha5
           path: |
-            AntiColision360-V6.0-alpha4.apk
-            AntiColision360-V6.0-alpha4.zip
+            AntiColision360-V6.0-alpha5.apk
+            AntiColision360-V6.0-alpha5.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha4
+          TAG: v6.0-alpha5
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 4' \
-              --notes 'Cámara trasera nativa + GPS + IMU. Muestra velocidad, precisión GPS, rumbo GPS, rumbo IMU, aceleración y giro. Sin IA todavía. Mantiene firma de prueba estable y ZIP para Android.' \
+              --title 'AntiColisión 360 V6.0 Alpha 5' \
+              --notes 'Cámara trasera + GPS/IMU + primera IA nativa EfficientDet Lite0. Detecta peatón, bicicleta, motocicleta, auto, bus y camión con recuadros. Sin alarmas ni riesgo todavía. Mantiene firma estable y ZIP para Android.' \
               --prerelease
           fi
