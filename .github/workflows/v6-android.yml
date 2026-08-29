@@ -43,29 +43,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha3.apk
-          zip -j AntiColision360-V6.0-alpha3.zip AntiColision360-V6.0-alpha3.apk
-          sha256sum AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha4.apk
+          zip -j AntiColision360-V6.0-alpha4.zip AntiColision360-V6.0-alpha4.apk
+          sha256sum AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha3
+          name: AntiColision360-V6.0-alpha4
           path: |
-            AntiColision360-V6.0-alpha3.apk
-            AntiColision360-V6.0-alpha3.zip
+            AntiColision360-V6.0-alpha4.apk
+            AntiColision360-V6.0-alpha4.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha3
+          TAG: v6.0-alpha4
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha4.apk AntiColision360-V6.0-alpha4.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 3' \
-              --notes 'Prueba nativa de cámara trasera. Sin IA, GPS ni detección. Incluye firma de prueba estable para facilitar futuras actualizaciones y ZIP para descargar desde Android.' \
+              --title 'AntiColisión 360 V6.0 Alpha 4' \
+              --notes 'Cámara trasera nativa + GPS + IMU. Muestra velocidad, precisión GPS, rumbo GPS, rumbo IMU, aceleración y giro. Sin IA todavía. Mantiene firma de prueba estable y ZIP para Android.' \
               --prerelease
           fi
