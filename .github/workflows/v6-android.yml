@@ -52,29 +52,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha7.apk
-          zip -j AntiColision360-V6.0-alpha7.zip AntiColision360-V6.0-alpha7.apk
-          sha256sum AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha8.apk
+          zip -j AntiColision360-V6.0-alpha8.zip AntiColision360-V6.0-alpha8.apk
+          sha256sum AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha7
+          name: AntiColision360-V6.0-alpha8
           path: |
-            AntiColision360-V6.0-alpha7.apk
-            AntiColision360-V6.0-alpha7.zip
+            AntiColision360-V6.0-alpha8.apk
+            AntiColision360-V6.0-alpha8.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha7
+          TAG: v6.0-alpha8
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha7.apk AntiColision360-V6.0-alpha7.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 7' \
-              --notes 'Cámara + GPS/IMU + IA + tracking. Filtra detecciones contenidas dentro de TV/laptop para reducir falsos peatones de pantallas, usa etiquetas cortas separadas y endurece la asociación temporal de T#.' \
+              --title 'AntiColisión 360 V6.0 Alpha 8' \
+              --notes 'Cámara + GPS/IMU + IA + tracking + filtro de pantallas + primera detección visual de carril real. Solo dibuja límites blanco/amarillo cuando ambas marcas tienen geometría coherente y confianza >=60%. La posición IZQ/ADEL/DER usa el carril detectado cuando está disponible; si no, vuelve al centro de cámara. Sin alarmas ni cálculo de riesgo todavía.' \
               --prerelease
           fi
