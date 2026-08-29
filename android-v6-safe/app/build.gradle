@@ -10,8 +10,8 @@ android {
         applicationId 'com.anticolision360.v6safe'
         minSdk 26
         targetSdk 35
-        versionCode 60008
-        versionName '6.0.0-alpha7'
+        versionCode 60009
+        versionName '6.0.0-alpha8'
     }
 
     signingConfigs {
