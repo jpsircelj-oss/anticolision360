@@ -52,29 +52,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha5.apk
-          zip -j AntiColision360-V6.0-alpha5.zip AntiColision360-V6.0-alpha5.apk
-          sha256sum AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha6.apk
+          zip -j AntiColision360-V6.0-alpha6.zip AntiColision360-V6.0-alpha6.apk
+          sha256sum AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha5
+          name: AntiColision360-V6.0-alpha6
           path: |
-            AntiColision360-V6.0-alpha5.apk
-            AntiColision360-V6.0-alpha5.zip
+            AntiColision360-V6.0-alpha6.apk
+            AntiColision360-V6.0-alpha6.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha5
+          TAG: v6.0-alpha6
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha5.apk AntiColision360-V6.0-alpha5.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha6.apk AntiColision360-V6.0-alpha6.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 5' \
-              --notes 'Cámara trasera + GPS/IMU + primera IA nativa EfficientDet Lite0. Detecta peatón, bicicleta, motocicleta, auto, bus y camión con recuadros. Sin alarmas ni riesgo todavía. Mantiene firma estable y ZIP para Android.' \
+              --title 'AntiColisión 360 V6.0 Alpha 6' \
+              --notes 'Cámara + GPS/IMU + IA con seguimiento temporal. Estabiliza etiquetas, exige persistencia mínima y clasifica objetos como IZQUIERDA, ADELANTE o DERECHA respecto del eje de cámara. Sin alertas ni cálculo de riesgo todavía.' \
               --prerelease
           fi
