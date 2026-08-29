@@ -35,34 +35,37 @@ jobs:
       - name: Install SDK 35
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
+      - name: Restore stable test signing key
+        run: base64 -d android-v6-safe/test-signing.keystore.b64 > android-v6-safe/test-signing.keystore
+
       - name: Build debug APK
         run: gradle -p android-v6-safe --stacktrace assembleDebug
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha2.1.apk
-          zip -j AntiColision360-V6.0-alpha2.1.zip AntiColision360-V6.0-alpha2.1.apk
-          sha256sum AntiColision360-V6.0-alpha2.1.apk AntiColision360-V6.0-alpha2.1.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha3.apk
+          zip -j AntiColision360-V6.0-alpha3.zip AntiColision360-V6.0-alpha3.apk
+          sha256sum AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha2.1
+          name: AntiColision360-V6.0-alpha3
           path: |
-            AntiColision360-V6.0-alpha2.1.apk
-            AntiColision360-V6.0-alpha2.1.zip
+            AntiColision360-V6.0-alpha3.apk
+            AntiColision360-V6.0-alpha3.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha2.1
+          TAG: v6.0-alpha3
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha2.1.apk AntiColision360-V6.0-alpha2.1.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha2.1.apk AntiColision360-V6.0-alpha2.1.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha3.apk AntiColision360-V6.0-alpha3.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 alpha 2.1' \
-              --notes 'Diagnóstico Android básico: sin pantalla completa, sin tema personalizado, sin cámara, GPS, audio ni IA. Incluye ZIP para evitar bloqueos del navegador al descargar APK.' \
+              --title 'AntiColisión 360 V6.0 Alpha 3' \
+              --notes 'Prueba nativa de cámara trasera. Sin IA, GPS ni detección. Incluye firma de prueba estable para facilitar futuras actualizaciones y ZIP para descargar desde Android.' \
               --prerelease
           fi
