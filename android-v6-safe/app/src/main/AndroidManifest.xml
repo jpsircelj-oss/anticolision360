@@ -13,11 +13,17 @@
         android:label="AntiColisión 360"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity
-            android:name="com.anticolision360.v6safe.MainActivityAlpha92"
+            android:name="com.anticolision360.v6safe.MainActivityAlpha93"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="anticolision360" android:host="drive" />
             </intent-filter>
         </activity>
     </application>
