@@ -12,7 +12,7 @@
         android:label="AntiColisión 360"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity
-            android:name="com.anticolision360.v6safe.MainActivityAlpha9"
+            android:name="com.anticolision360.v6safe.MainActivityAlpha91"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
