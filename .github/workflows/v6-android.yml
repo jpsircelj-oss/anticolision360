@@ -39,7 +39,9 @@ jobs:
         run: base64 -d android-v6-safe/test-signing.keystore.b64 > android-v6-safe/test-signing.keystore
 
       - name: Generate Alpha 9 source
-        run: python3 android-v6-safe/make_alpha9.py
+        run: |
+          sed -i 's/pattern.subn(new_telemetry, s, count=1)/pattern.subn(lambda m: new_telemetry, s, count=1)/' android-v6-safe/make_alpha9.py
+          python3 android-v6-safe/make_alpha9.py
 
       - name: Download EfficientDet Lite0 model
         run: |
