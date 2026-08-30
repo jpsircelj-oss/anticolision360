@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<title>AntiColisión 360 V5.16.5</title>
+<style>
+html,body{margin:0;height:100%;background:#05080d;color:#fff;font-family:system-ui;display:grid;place-items:center}
+.m{padding:24px;text-align:center;max-width:560px}
+.s{width:38px;height:38px;border:4px solid #234;border-top-color:#31d8ff;border-radius:50%;animation:r 1s linear infinite;margin:auto auto 18px}
+@keyframes r{to{transform:rotate(360deg)}}
+.e{color:#ff91a3}
+</style>
+</head>
+<body>
+<div class="m" id="m"><div class="s"></div><b>Abriendo AntiColisión 360 V5.16.5…</b><p>Aplicando alertas laterales difuminadas y audio direccional.</p></div>
+<script>
+(async()=>{try{
+  const r=await fetch('./v5164.html?v=5165',{cache:'no-store'});
+  if(!r.ok)throw new Error('No se pudo cargar la V5.16.4 base');
+  let src=await r.text();
+  const marker='document.open();document.write(html);document.close()';
+  if(!src.includes(marker))throw new Error('La base V5.16.4 no contiene el punto de actualización');
+
+  src=src.split('V5.16.4').join('V5.16.5');
+  src=src.split('V5.16.5 Carril + Prioridad VRU').join('V5.16.5 Carril + Alertas Laterales');
+
+  const extra=`
+html=html.split('V5.16.5 Carril + Prioridad VRU').join('V5.16.5 Carril + Alertas Laterales');
+html=html.replace('V5.16.5 Carril + Alertas Laterales</div>','V5.16.5 Carril + Alertas Laterales</div>✓ Alertas laterales sin carteles: destello difuminado amarillo o rojo en el margen correspondiente<br>✓ Rojo lateral: beep corto repetido · rojo frontal: alarma más intensa<br>✓ Moto, bicicleta y peatón pasan a rojo antes cuando la proximidad o el cierre de distancia lo justifican<br>');
+
+const acHelpers=\`const acAlertState={ui:false,audioCtx:null,lastSideTone:0,lastFrontTone:0,lastVisual:{left:0,right:0},tracks:Object.create(null)};
+function acAlertInit(){if(acAlertState.ui)return;acAlertState.ui=true;const st=document.createElement('style');st.id='acSideAlertStyle';st.textContent='.acSideFlash{position:fixed;top:0;bottom:0;width:16vw;max-width:180px;min-width:58px;z-index:2147483000;pointer-events:none;opacity:0}.acSideFlash.left{left:0}.acSideFlash.right{right:0}';document.head.appendChild(st);for(const side of ['left','right']){const d=document.createElement('div');d.id='acSideFlash-'+side;d.className='acSideFlash '+side;document.body.appendChild(d)}const unlock=()=>{try{const C=window.AudioContext||window.webkitAudioContext;if(C&&!acAlertState.audioCtx)acAlertState.audioCtx=new C();if(acAlertState.audioCtx&&acAlertState.audioCtx.state==='suspended')acAlertState.audioCtx.resume().catch(()=>{})}catch(e){}};document.addEventListener('pointerdown',unlock,{passive:true});document.addEventListener('touchstart',unlock,{passive:true});document.addEventListener('click',unlock,{passive:true})}
+function acTone(freq,duration,type,gain,delay=0){acAlertInit();const a=acAlertState.audioCtx;if(!a)return;try{if(a.state==='suspended')a.resume().catch(()=>{});const t=a.currentTime+delay,o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.001,gain),t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+duration+.03)}catch(e){}}
+function acSideTone(){const now=performance.now();if(now-acAlertState.lastSideTone<650)return;acAlertState.lastSideTone=now;acTone(980,.075,'square',.060,0);acTone(980,.075,'square',.060,.14)}
+function acFrontTone(){const now=performance.now();if(now-acAlertState.lastFrontTone<900)return;acAlertState.lastFrontTone=now;acTone(690,.13,'sawtooth',.105,0);acTone(930,.13,'sawtooth',.120,.14);acTone(690,.16,'sawtooth',.110,.30)}
+function acFlashSide(side,red){acAlertInit();const el=document.getElementById('acSideFlash-'+side);if(!el)return;const now=performance.now(),wait=red?420:720;if(now-acAlertState.lastVisual[side]<wait)return;acAlertState.lastVisual[side]=now;const toward=side==='left'?'to right':'to left',strong=red?'rgba(255,28,48,.86)':'rgba(255,214,36,.76)',mid=red?'rgba(255,28,48,.34)':'rgba(255,214,36,.30)';el.style.background='linear-gradient('+toward+','+strong+' 0%,'+mid+' 46%,rgba(0,0,0,0) 100%)';if(el.getAnimations)el.getAnimations().forEach(a=>a.cancel());if(el.animate){el.animate([{opacity:0},{opacity:red?1:.82},{opacity:0}],{duration:red?390:620,iterations:red?3:2,easing:'ease-out'})}else{el.style.opacity=red?'1':'.82';setTimeout(()=>{el.style.opacity='0'},red?650:850)}}
+function acAlertRisk(b,cls,motion,r){if(!r||r.level==='BAJO'||r.parkedLateral)return;const dir=directionFor(b);if(dir==='ADELANTE'){if(r.level==='ALTO')acFrontTone();return}if(dir!=='IZQUIERDA'&&dir!=='DERECHA')return;if(!(vehicles.has(cls)||vulnerable.has(cls)))return;const side=dir==='IZQUIERDA'?'left':'right',sw=Math.max(1,innerWidth),sh=Math.max(1,innerHeight),cx=(b.x+b.w/2)/sw,band=Math.max(0,Math.min(9,Math.floor(cx*10))),cy=typeof detectionCycle==='number'?detectionCycle:Math.floor(performance.now()/180),key=side+'|'+cls+'|'+band,t=acAlertState.tracks[key]||(acAlertState.tracks[key]={hits:0,cycle:-99});if(t.cycle===cy)return;t.hits=(cy-t.cycle<=2)?Math.min(6,t.hits+1):1;t.cycle=cy;const vru=cls==='person'||cls==='bicycle'||cls==='motorcycle'||cls==='vru',two=cls==='bicycle'||cls==='motorcycle',close=(r.vruImmediate||r.area>(two?.010:.014)||r.bottom>sh*(two?.76:.80)||r.closing>(two?.008:.011)||(Number.isFinite(r.ttc)&&r.ttc<(two?4.0:3.2))),red=r.level==='ALTO'||vru&&close,need=r.level==='ALTO'?1:red?2:(vru?2:3);if(t.hits<need)return;acFlashSide(side,red);if(red)acSideTone()}
+\`;
+if(!html.includes('function assessRisk(b,cls,motion,confidence=1){'))throw new Error('No se encontró assessRisk para alertas laterales');
+html=html.replace('function assessRisk(b,cls,motion,confidence=1){',acHelpers+'function assessRisk(b,cls,motion,confidence=1){');
+const riskReturn='return{level,color,score,ttc,closing,priority,area,bottom,thresholds:thr,path,confidence:visualConfidence,forecast:trajectory.forecast,futureNear,trajectory,requiredVotes,collisionVotes:motion.collisionVotes,closingVotes:approach.closingVotes,steadyLead:approach.steadyLead,parkedLateral,vruPresence,vruImmediate,proximityWatch:sensitivity.proximityWatch,longRangeWatch:sensitivity.longRangeWatch,leadCatchup:lead.catchup,leadClose:lead.closeLead,targetDistanceM:sensitivity.targetDistanceM}}';
+if(!html.includes(riskReturn))throw new Error('No se encontró salida de riesgo para alertas laterales');
+html=html.replace(riskReturn,"acAlertRisk(b,cls,motion,{level,area,bottom,closing,vruImmediate,vruPresence,parkedLateral,ttc});"+riskReturn);
+section('function imperativeFor(q){','\\nfunction healthState',"function imperativeFor(q){const cls=q.p.class,dir=directionFor(q.b),name=vehicleDisplayLabel(q);if(dir!=='ADELANTE'&&(vehicles.has(cls)||vulnerable.has(cls)))return'\\u200B';if((cls==='car'||cls==='truck'||cls==='bus')&&dir==='ADELANTE'&&q.r.level==='ALTO')return'FRENE · '+name+' ADELANTE';if(cls==='person')return'PEATÓN '+dir;if(cls==='bicycle')return'BICICLETA '+dir;if(cls==='motorcycle')return'MOTOCICLETA '+dir;if(cls==='vru')return'USUARIO VULNERABLE '+dir;if(vulnerable.has(cls))return'ANIMAL '+dir;if(cls==='car'||cls==='truck'||cls==='bus')return name+' '+dir;return'OBSTÁCULO '+dir}\\n");
+if(!html.includes('acAlertRisk')||!html.includes('acSideFlash'))throw new Error('Actualización V5.16.5 incompleta');
+`;
+
+  src=src.replace(marker,extra+marker);
+  document.open();document.write(src);document.close();
+}catch(e){document.getElementById('m').innerHTML='<div class="e"><b>No pudo abrirse la V5.16.5</b><p>'+String(e&&e.message||e)+'</p><p>Recargá esta página una vez.</p></div>'}})();
+</script>
+</body>
+</html>
