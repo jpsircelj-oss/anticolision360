@@ -38,7 +38,7 @@ jobs:
       - name: Restore stable test signing key
         run: base64 -d android-v6-safe/test-signing.keystore.b64 > android-v6-safe/test-signing.keystore
 
-      - name: Generate Alpha 9.4 source
+      - name: Generate Alpha 9.4.1 source
         run: |
           sed -i 's/pattern.subn(new_telemetry, s, count=1)/pattern.subn(lambda m: new_telemetry, s, count=1)/' android-v6-safe/make_alpha9.py
           python3 android-v6-safe/make_alpha9.py
@@ -46,6 +46,7 @@ jobs:
           python3 android-v6-safe/make_alpha92.py
           python3 android-v6-safe/make_alpha93.py
           python3 android-v6-safe/make_alpha94.py
+          python3 android-v6-safe/make_alpha941.py
 
       - name: Download EfficientDet Lite0 model
         run: |
@@ -61,29 +62,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha9.4.apk
-          zip -j AntiColision360-V6.0-alpha9.4.zip AntiColision360-V6.0-alpha9.4.apk
-          sha256sum AntiColision360-V6.0-alpha9.4.apk AntiColision360-V6.0-alpha9.4.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha9.4.1.apk
+          zip -j AntiColision360-V6.0-alpha9.4.1.zip AntiColision360-V6.0-alpha9.4.1.apk
+          sha256sum AntiColision360-V6.0-alpha9.4.1.apk AntiColision360-V6.0-alpha9.4.1.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha9.4
+          name: AntiColision360-V6.0-alpha9.4.1
           path: |
-            AntiColision360-V6.0-alpha9.4.apk
-            AntiColision360-V6.0-alpha9.4.zip
+            AntiColision360-V6.0-alpha9.4.1.apk
+            AntiColision360-V6.0-alpha9.4.1.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha9.4
+          TAG: v6.0-alpha9.4.1
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha9.4.apk AntiColision360-V6.0-alpha9.4.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha9.4.1.apk AntiColision360-V6.0-alpha9.4.1.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha9.4.apk AntiColision360-V6.0-alpha9.4.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha9.4.1.apk AntiColision360-V6.0-alpha9.4.1.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 9.4' \
-              --notes 'Modo conducción sin carteles ni recuadros: alertas visuales mediante resplandor difuminado en borde izquierdo, derecho o frontal. Amarillo indica atención y rojo riesgo alto. Peatón, bicicleta y motocicleta tienen prioridad y pasan a rojo antes según proximidad visual. Sonido solo en rojo: beep corto repetido lateral y alarma frontal más intensa. DEBUG conserva cajas, etiquetas, carril y datos técnicos. Mantiene deep link anticolision360://drive.' \
+              --title 'AntiColisión 360 V6.0 Alpha 9.4.1' \
+              --notes 'Corrige el resplandor rojo falso de Alpha 9.4. En modo normal sigue sin carteles ni recuadros. Los avisos son halos difuminados localizados: izquierda, derecha o frontal. Rojo requiere combinación de proximidad visual y confianza; amarillo mantiene atención temprana. Filtra detecciones gigantes débiles. Sonido solo en rojo y DEBUG conserva cajas, etiquetas y datos técnicos.' \
               --prerelease
           fi
