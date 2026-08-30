@@ -38,6 +38,9 @@ jobs:
       - name: Restore stable test signing key
         run: base64 -d android-v6-safe/test-signing.keystore.b64 > android-v6-safe/test-signing.keystore
 
+      - name: Generate Alpha 9 source
+        run: python3 android-v6-safe/make_alpha9.py
+
       - name: Download EfficientDet Lite0 model
         run: |
           mkdir -p android-v6-safe/app/src/main/assets
@@ -52,29 +55,29 @@ jobs:
 
       - name: Prepare APK and ZIP
         run: |
-          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha8.apk
-          zip -j AntiColision360-V6.0-alpha8.zip AntiColision360-V6.0-alpha8.apk
-          sha256sum AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip
+          cp android-v6-safe/app/build/outputs/apk/debug/app-debug.apk AntiColision360-V6.0-alpha9.apk
+          zip -j AntiColision360-V6.0-alpha9.zip AntiColision360-V6.0-alpha9.apk
+          sha256sum AntiColision360-V6.0-alpha9.apk AntiColision360-V6.0-alpha9.zip
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-V6.0-alpha8
+          name: AntiColision360-V6.0-alpha9
           path: |
-            AntiColision360-V6.0-alpha8.apk
-            AntiColision360-V6.0-alpha8.zip
+            AntiColision360-V6.0-alpha9.apk
+            AntiColision360-V6.0-alpha9.zip
 
       - name: Create or update prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v6.0-alpha8
+          TAG: v6.0-alpha9
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip --clobber
+            gh release upload "$TAG" AntiColision360-V6.0-alpha9.apk AntiColision360-V6.0-alpha9.zip --clobber
           else
-            gh release create "$TAG" AntiColision360-V6.0-alpha8.apk AntiColision360-V6.0-alpha8.zip \
+            gh release create "$TAG" AntiColision360-V6.0-alpha9.apk AntiColision360-V6.0-alpha9.zip \
               --target "$GITHUB_SHA" \
-              --title 'AntiColisión 360 V6.0 Alpha 8' \
-              --notes 'Cámara + GPS/IMU + IA + tracking + filtro de pantallas + primera detección visual de carril real. Solo dibuja límites blanco/amarillo cuando ambas marcas tienen geometría coherente y confianza >=60%. La posición IZQ/ADEL/DER usa el carril detectado cuando está disponible; si no, vuelve al centro de cámara. Sin alarmas ni cálculo de riesgo todavía.' \
+              --title 'AntiColisión 360 V6.0 Alpha 9' \
+              --notes 'Interfaz de conducción limpia y pantalla completa. En modo normal muestra como máximo 3 objetos relevantes y oculta T#, porcentajes, datos de depuración y líneas de carril. Mantiene tracking interno de todos los objetos. Prioriza peatón/bici/moto y vehículos adelante o laterales cercanos. Filtra detecciones gigantes débiles en los bordes. Incluye botón discreto para DEBUG, HUD compacto, pantalla encendida y solicitud de acceso directo al escritorio en el primer inicio.' \
               --prerelease
           fi
