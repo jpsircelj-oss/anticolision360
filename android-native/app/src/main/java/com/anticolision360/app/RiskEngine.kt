@@ -1,6 +1,7 @@
 package com.anticolision360.app
 
 import android.graphics.RectF
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -19,6 +20,7 @@ data class TrackedObject(
     val score: Float,
     val box: RectF,
     val closingRate: Float,
+    val lateralRate: Float,
     val ageMs: Long
 ) {
     val centerX: Float get() = box.centerX()
@@ -50,7 +52,9 @@ class MotionTracker {
         var score: Float,
         var box: RectF,
         var previousSize: Float,
+        var previousCenterX: Float,
         var closingRate: Float,
+        var lateralRate: Float,
         var lastSeen: Long,
         var born: Long
     )
@@ -69,9 +73,9 @@ class MotionTracker {
                 val overlap = iou(track.box, det.box)
                 val dx = track.box.centerX() - det.box.centerX()
                 val dy = track.box.centerY() - det.box.centerY()
-                val centerSimilarity = 1f - min(1f, sqrt(dx * dx + dy * dy) / 0.32f)
-                val score = max(overlap, centerSimilarity * 0.58f)
-                if (score > bestScore && score > 0.20f) {
+                val centerSimilarity = 1f - min(1f, sqrt(dx * dx + dy * dy) / 0.30f)
+                val score = max(overlap, centerSimilarity * 0.62f)
+                if (score > bestScore && score > 0.22f) {
                     best = track
                     bestScore = score
                 }
@@ -80,9 +84,16 @@ class MotionTracker {
             if (best == null) {
                 val size = sqrt(max(det.box.width() * det.box.height(), 0.000001f))
                 tracks += InternalTrack(
-                    id = nextId++, label = det.label, score = det.score,
-                    box = RectF(det.box), previousSize = size,
-                    closingRate = 0f, lastSeen = now, born = now
+                    id = nextId++,
+                    label = det.label,
+                    score = det.score,
+                    box = RectF(det.box),
+                    previousSize = size,
+                    previousCenterX = det.box.centerX(),
+                    closingRate = 0f,
+                    lateralRate = 0f,
+                    lastSeen = now,
+                    born = now
                 )
                 used += tracks.last().id
             } else {
@@ -90,23 +101,26 @@ class MotionTracker {
                 val dt = ((now - track.lastSeen).coerceAtLeast(1L) / 1000f).coerceAtMost(0.8f)
                 val measured = RectF(det.box)
                 val smoothed = RectF(
-                    track.box.left * 0.42f + measured.left * 0.58f,
-                    track.box.top * 0.42f + measured.top * 0.58f,
-                    track.box.right * 0.42f + measured.right * 0.58f,
-                    track.box.bottom * 0.42f + measured.bottom * 0.58f
+                    track.box.left * 0.46f + measured.left * 0.54f,
+                    track.box.top * 0.46f + measured.top * 0.54f,
+                    track.box.right * 0.46f + measured.right * 0.54f,
+                    track.box.bottom * 0.46f + measured.bottom * 0.54f
                 )
                 val size = sqrt(max(smoothed.width() * smoothed.height(), 0.000001f))
                 val instantClosing = ((size - track.previousSize) / dt).coerceIn(-1.2f, 1.2f)
-                track.closingRate = track.closingRate * 0.74f + instantClosing * 0.26f
+                val instantLateral = ((smoothed.centerX() - track.previousCenterX) / dt).coerceIn(-1.5f, 1.5f)
+                track.closingRate = track.closingRate * 0.78f + instantClosing * 0.22f
+                track.lateralRate = track.lateralRate * 0.76f + instantLateral * 0.24f
                 track.previousSize = size
+                track.previousCenterX = smoothed.centerX()
                 track.box = smoothed
-                track.score = track.score * 0.35f + det.score * 0.65f
+                track.score = track.score * 0.40f + det.score * 0.60f
                 track.lastSeen = now
                 used += track.id
             }
         }
 
-        tracks.removeAll { now - it.lastSeen > 800L }
+        tracks.removeAll { now - it.lastSeen > 760L }
         return tracks.map {
             TrackedObject(
                 id = it.id,
@@ -114,6 +128,7 @@ class MotionTracker {
                 score = it.score,
                 box = RectF(it.box),
                 closingRate = it.closingRate,
+                lateralRate = it.lateralRate,
                 ageMs = now - it.born
             )
         }
@@ -150,6 +165,9 @@ class RiskEngine {
         var leftTargetId: Int? = null
         var rightTargetId: Int? = null
         var frontTargetId: Int? = null
+        var bestLeftDanger = 0f
+        var bestRightDanger = 0f
+        var bestFrontDanger = 0f
 
         val speed = speedKmh
         val parking = if (speed != null && speed <= 5.0f) {
@@ -161,78 +179,110 @@ class RiskEngine {
         }
 
         tracks.forEach { t ->
-            if (t.ageMs < 160L || t.score < 0.27f) return@forEach
+            if (t.ageMs < 220L || t.score < 0.28f) return@forEach
 
             val x = t.centerX
             val bottom = t.box.bottom
             val width = t.box.width()
             val height = t.box.height()
-            val stronglyCentral = x in 0.42f..0.58f
-            val frontBand = if (width > 0.46f) 0.43f..0.57f else 0.36f..0.64f
-            val geometryPlausible = width < 0.70f && height < 0.82f
-            val inFrontCorridor = x in frontBand && bottom > 0.34f && geometryPlausible
+            val area = t.area
+            val closing = t.closingRate
+            val ttc = t.ttcSeconds
 
-            if (inFrontCorridor && t.label in vehicles && t.ageMs >= 250L) {
-                val ttc = t.ttcSeconds
-                val closing = t.closingRate
-                val speedFactor = ((speed ?: 30f) / 100f).coerceIn(0.15f, 1.30f)
-                val redArea = 0.105f - 0.022f * speedFactor
-                val yellowArea = 0.050f - 0.008f * speedFactor
+            // Dynamic trapezoidal driving corridor: narrow in the distance,
+            // wider near the hood. This avoids treating parked side vehicles as lead cars.
+            val depth = ((bottom - 0.32f) / 0.68f).coerceIn(0f, 1f)
+            val halfLane = 0.10f + 0.20f * depth
+            val laneLeft = 0.50f - halfLane
+            val laneRight = 0.50f + halfLane
+            val overlap = max(0f, min(t.box.right, laneRight) - max(t.box.left, laneLeft))
+            val overlapRatio = overlap / max(width, 0.001f)
+            val stronglyCentral = x in (0.50f - halfLane * 0.68f)..(0.50f + halfLane * 0.68f)
+            val geometryPlausible = width < 0.64f && height < 0.78f && area < 0.30f
+            val inFrontCorridor = bottom > 0.34f && geometryPlausible && (overlapRatio > 0.34f || stronglyCentral)
 
-                val red = (ttc < 2.6f && closing > 0.005f) ||
-                    (stronglyCentral && t.area > redArea && closing > 0.0020f && t.ageMs > 420L)
+            if (inFrontCorridor && t.label in vehicles && t.ageMs >= 420L) {
+                // No front alert from distance alone: there must be real convergence.
+                val red = (ttc < 2.35f && closing > 0.007f && area > 0.006f) ||
+                    (stronglyCentral && area > 0.115f && closing > 0.0042f && t.ageMs > 650L)
                 val yellow = red ||
-                    (ttc < 5.2f && closing > 0.003f) ||
-                    (stronglyCentral && t.area > yellowArea && closing > 0.0015f && t.ageMs > 420L)
+                    (ttc < 4.4f && closing > 0.0042f && area > 0.004f) ||
+                    (stronglyCentral && area > 0.065f && closing > 0.0025f && t.ageMs > 650L)
 
-                val candidate = when {
+                val level = when {
                     red -> AlertLevel.RED
                     yellow -> AlertLevel.YELLOW
                     else -> AlertLevel.NONE
                 }
-
-                if (candidate.ordinal > front.ordinal) {
-                    front = candidate
-                    frontTargetId = t.id
-                    frontText = when (candidate) {
-                        AlertLevel.RED -> "Vehículo adelante · cierre rápido"
-                        AlertLevel.YELLOW -> "Vehículo adelante · vigilar distancia"
-                        else -> ""
+                if (level != AlertLevel.NONE) {
+                    val danger = (if (ttc.isFinite()) (8f - ttc).coerceAtLeast(0f) else 0f) + area * 18f + closing * 55f
+                    if (level.ordinal > front.ordinal || (level == front && danger > bestFrontDanger)) {
+                        front = level
+                        bestFrontDanger = danger
+                        frontTargetId = t.id
+                        frontText = if (level == AlertLevel.RED) {
+                            "Vehículo adelante · cierre rápido"
+                        } else {
+                            "Vehículo adelante · vigilar distancia"
+                        }
                     }
                 }
             }
 
-            if (speed != null && speed > 30f && t.label in sideRelevant && bottom > 0.40f && t.ageMs >= 220L) {
+            if (speed != null && speed > 31.5f && t.label in sideRelevant && bottom > 0.40f && t.ageMs >= 280L) {
                 val side = when {
-                    x < 0.36f -> -1
-                    x > 0.64f -> 1
+                    x < 0.42f -> -1
+                    x > 0.58f -> 1
                     else -> 0
                 }
                 if (side != 0) {
                     val isVulnerable = t.label in vulnerable
-                    val intrudesTowardLane = if (side < 0) t.box.right > 0.36f else t.box.left < 0.64f
-                    val nearEnough = t.area > if (isVulnerable) 0.006f else 0.018f
-                    val closingEnough = t.closingRate > if (isVulnerable) 0.0025f else 0.0045f
-                    val urgent = when {
-                        isVulnerable -> nearEnough && (t.ttcSeconds < 3.6f || t.area > 0.025f || closingEnough)
-                        else -> intrudesTowardLane && (t.ttcSeconds < 3.0f || t.area > 0.060f || closingEnough)
+                    val movingTowardLane = if (side < 0) t.lateralRate > 0.012f else t.lateralRate < -0.012f
+                    val laneBoundary = if (side < 0) laneLeft else laneRight
+                    val intrudes = if (side < 0) t.box.right > laneBoundary else t.box.left < laneBoundary
+                    val deepIntrusion = if (side < 0) t.box.right > laneLeft + 0.055f else t.box.left < laneRight - 0.055f
+
+                    val level = if (isVulnerable) {
+                        val near = area > 0.007f || bottom > 0.63f
+                        val red = near && (
+                            (movingTowardLane && (area > 0.013f || bottom > 0.72f)) ||
+                                (intrudes && ttc < 2.7f && closing > 0.004f)
+                            )
+                        val yellow = red || (near && (movingTowardLane || intrudes || closing > 0.0045f))
+                        when {
+                            red -> AlertLevel.RED
+                            yellow -> AlertLevel.YELLOW
+                            else -> AlertLevel.NONE
+                        }
+                    } else {
+                        // Parked or same-pace side vehicles should not cause red just because
+                        // they are visually large. They must actually intrude or converge.
+                        val samePace = abs(closing) < 0.0024f && abs(t.lateralRate) < 0.010f
+                        val red = deepIntrusion && !samePace && (
+                            (ttc < 2.5f && closing > 0.005f) || area > 0.085f
+                            )
+                        val yellow = red || (intrudes && (
+                            area > 0.028f || closing > 0.0045f || movingTowardLane
+                            ))
+                        when {
+                            red -> AlertLevel.RED
+                            yellow -> AlertLevel.YELLOW
+                            else -> AlertLevel.NONE
+                        }
                     }
-                    val caution = when {
-                        isVulnerable -> nearEnough || closingEnough
-                        else -> intrudesTowardLane && (nearEnough || closingEnough)
-                    }
-                    val level = when {
-                        urgent -> AlertLevel.RED
-                        caution -> AlertLevel.YELLOW
-                        else -> AlertLevel.NONE
-                    }
-                    if (side < 0 && level.ordinal > left.ordinal) {
-                        left = level
-                        leftTargetId = if (level == AlertLevel.NONE) null else t.id
-                    }
-                    if (side > 0 && level.ordinal > right.ordinal) {
-                        right = level
-                        rightTargetId = if (level == AlertLevel.NONE) null else t.id
+
+                    if (level != AlertLevel.NONE) {
+                        val danger = area * 18f + abs(t.lateralRate) * 8f + closing.coerceAtLeast(0f) * 40f + if (intrudes) 1.2f else 0f
+                        if (side < 0 && (level.ordinal > left.ordinal || (level == left && danger > bestLeftDanger))) {
+                            left = level
+                            bestLeftDanger = danger
+                            leftTargetId = t.id
+                        }
+                        if (side > 0 && (level.ordinal > right.ordinal || (level == right && danger > bestRightDanger))) {
+                            right = level
+                            bestRightDanger = danger
+                            rightTargetId = t.id
+                        }
                     }
                 }
             }
