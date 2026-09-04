@@ -13,8 +13,8 @@ android {
         applicationId = "com.anticolision360.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 600
-        versionName = "6.0.0-native"
+        versionCode = 610
+        versionName = "6.1.0-native"
     }
 
     buildTypes {
