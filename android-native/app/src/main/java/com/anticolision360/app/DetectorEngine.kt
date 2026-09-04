@@ -3,11 +3,11 @@ package com.anticolision360.app
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.RectF
 import androidx.camera.core.ImageProxy
 import org.tensorflow.lite.task.core.BaseOptions
 import org.tensorflow.lite.task.vision.detector.ObjectDetector
 import org.tensorflow.lite.support.image.TensorImage
-import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
@@ -15,6 +15,10 @@ class DetectorEngine(context: Context) {
     private val relevant = setOf(
         "person", "bicycle", "car", "motorcycle", "bus", "truck", "skateboard",
         "dog", "cat", "horse", "sheep", "cow", "bear"
+    )
+    private val vehicles = setOf("car", "truck", "bus", "motorcycle")
+    private val vulnerable = setOf(
+        "person", "bicycle", "motorcycle", "skateboard", "dog", "cat", "horse", "sheep", "cow", "bear"
     )
 
     private val detector: ObjectDetector
@@ -25,7 +29,7 @@ class DetectorEngine(context: Context) {
             .build()
         val options = ObjectDetector.ObjectDetectorOptions.builder()
             .setBaseOptions(base)
-            .setMaxResults(20)
+            .setMaxResults(18)
             .setScoreThreshold(0.25f)
             .build()
         detector = ObjectDetector.createFromFileAndOptions(
@@ -47,18 +51,63 @@ class DetectorEngine(context: Context) {
         val w = rotated.width.toFloat().coerceAtLeast(1f)
         val h = rotated.height.toFloat().coerceAtLeast(1f)
 
-        return detections.mapNotNull { detection ->
+        val mapped = detections.mapNotNull { detection ->
             val category = detection.categories.maxByOrNull { it.score } ?: return@mapNotNull null
             val label = category.label.lowercase()
             if (label !in relevant) return@mapNotNull null
+
+            val minScore = if (label in vulnerable) 0.27f else 0.30f
+            if (category.score < minScore) return@mapNotNull null
+
             val b = detection.boundingBox
             val left = (b.left / w).coerceIn(0f, 1f)
             val top = (b.top / h).coerceIn(0f, 1f)
             val right = (b.right / w).coerceIn(0f, 1f)
             val bottom = (b.bottom / h).coerceIn(0f, 1f)
             if (right <= left || bottom <= top) return@mapNotNull null
-            RawDetection(label, category.score, android.graphics.RectF(left, top, right, bottom))
+
+            val box = RectF(left, top, right, bottom)
+            val bw = box.width()
+            val bh = box.height()
+            val area = bw * bh
+
+            if (bw < 0.012f || bh < 0.012f) return@mapNotNull null
+
+            if (label in vehicles) {
+                // Reject scene-wide/hood-like false positives. Genuine nearby buses/cars
+                // may be large, but should not occupy almost the whole camera frame.
+                if (bw > 0.80f || bh > 0.84f || area > 0.34f) return@mapNotNull null
+                if (bottom > 0.94f && top > 0.46f && bw > 0.56f) return@mapNotNull null
+                if (area > 0.24f && category.score < 0.42f) return@mapNotNull null
+            } else {
+                if (area > 0.26f) return@mapNotNull null
+            }
+
+            RawDetection(label, category.score, box)
+        }.sortedByDescending { it.score }
+
+        return suppressDuplicates(mapped).take(14)
+    }
+
+    private fun suppressDuplicates(items: List<RawDetection>): List<RawDetection> {
+        val kept = mutableListOf<RawDetection>()
+        for (item in items) {
+            val duplicate = kept.any { previous ->
+                previous.label == item.label && iou(previous.box, item.box) > 0.58f
+            }
+            if (!duplicate) kept += item
         }
+        return kept
+    }
+
+    private fun iou(a: RectF, b: RectF): Float {
+        val l = max(a.left, b.left)
+        val t = max(a.top, b.top)
+        val r = min(a.right, b.right)
+        val bot = min(a.bottom, b.bottom)
+        val inter = max(0f, r - l) * max(0f, bot - t)
+        val union = a.width() * a.height() + b.width() * b.height() - inter
+        return if (union > 0f) inter / union else 0f
     }
 
     private fun rgbaImageToBitmap(image: ImageProxy): Bitmap {
