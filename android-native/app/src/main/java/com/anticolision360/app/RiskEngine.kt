@@ -37,7 +37,10 @@ data class RiskState(
     val front: AlertLevel = AlertLevel.NONE,
     val frontText: String = "",
     val parkingMode: Boolean = false,
-    val speedKmh: Float? = null
+    val speedKmh: Float? = null,
+    val leftTargetId: Int? = null,
+    val rightTargetId: Int? = null,
+    val frontTargetId: Int? = null
 )
 
 class MotionTracker {
@@ -94,7 +97,7 @@ class MotionTracker {
                 )
                 val size = sqrt(max(smoothed.width() * smoothed.height(), 0.000001f))
                 val instantClosing = ((size - track.previousSize) / dt).coerceIn(-1.2f, 1.2f)
-                track.closingRate = track.closingRate * 0.70f + instantClosing * 0.30f
+                track.closingRate = track.closingRate * 0.74f + instantClosing * 0.26f
                 track.previousSize = size
                 track.box = smoothed
                 track.score = track.score * 0.35f + det.score * 0.65f
@@ -103,7 +106,7 @@ class MotionTracker {
             }
         }
 
-        tracks.removeAll { now - it.lastSeen > 850L }
+        tracks.removeAll { now - it.lastSeen > 800L }
         return tracks.map {
             TrackedObject(
                 id = it.id,
@@ -144,36 +147,53 @@ class RiskEngine {
         var right = AlertLevel.NONE
         var front = AlertLevel.NONE
         var frontText = ""
+        var leftTargetId: Int? = null
+        var rightTargetId: Int? = null
+        var frontTargetId: Int? = null
 
         val speed = speedKmh
         val parking = if (speed != null && speed <= 5.0f) {
             if (lowSpeedSince == 0L) lowSpeedSince = now
-            now - lowSpeedSince >= 1300L
+            now - lowSpeedSince >= 1200L
         } else {
             lowSpeedSince = 0L
             false
         }
 
         tracks.forEach { t ->
-            if (t.ageMs < 130L || t.score < 0.27f) return@forEach
+            if (t.ageMs < 160L || t.score < 0.27f) return@forEach
 
             val x = t.centerX
             val bottom = t.box.bottom
-            val inFrontCorridor = x in 0.34f..0.66f && bottom > 0.30f
+            val width = t.box.width()
+            val height = t.box.height()
+            val stronglyCentral = x in 0.42f..0.58f
+            val frontBand = if (width > 0.46f) 0.43f..0.57f else 0.36f..0.64f
+            val geometryPlausible = width < 0.70f && height < 0.82f
+            val inFrontCorridor = x in frontBand && bottom > 0.34f && geometryPlausible
 
-            if (inFrontCorridor && t.label in vehicles) {
+            if (inFrontCorridor && t.label in vehicles && t.ageMs >= 250L) {
                 val ttc = t.ttcSeconds
+                val closing = t.closingRate
                 val speedFactor = ((speed ?: 30f) / 100f).coerceIn(0.15f, 1.30f)
-                val redArea = 0.105f - 0.025f * speedFactor
-                val yellowArea = 0.050f - 0.010f * speedFactor
+                val redArea = 0.105f - 0.022f * speedFactor
+                val yellowArea = 0.050f - 0.008f * speedFactor
+
+                val red = (ttc < 2.6f && closing > 0.005f) ||
+                    (stronglyCentral && t.area > redArea && closing > 0.0020f && t.ageMs > 420L)
+                val yellow = red ||
+                    (ttc < 5.2f && closing > 0.003f) ||
+                    (stronglyCentral && t.area > yellowArea && closing > 0.0015f && t.ageMs > 420L)
 
                 val candidate = when {
-                    ttc < 2.6f || t.area > redArea -> AlertLevel.RED
-                    ttc < 5.4f || (t.area > yellowArea && t.closingRate > 0.004f) -> AlertLevel.YELLOW
+                    red -> AlertLevel.RED
+                    yellow -> AlertLevel.YELLOW
                     else -> AlertLevel.NONE
                 }
+
                 if (candidate.ordinal > front.ordinal) {
                     front = candidate
+                    frontTargetId = t.id
                     frontText = when (candidate) {
                         AlertLevel.RED -> "Vehículo adelante · cierre rápido"
                         AlertLevel.YELLOW -> "Vehículo adelante · vigilar distancia"
@@ -182,22 +202,38 @@ class RiskEngine {
                 }
             }
 
-            if (speed != null && speed > 30f && t.label in sideRelevant && bottom > 0.38f) {
+            if (speed != null && speed > 30f && t.label in sideRelevant && bottom > 0.40f && t.ageMs >= 220L) {
                 val side = when {
-                    x < 0.37f -> -1
-                    x > 0.63f -> 1
+                    x < 0.36f -> -1
+                    x > 0.64f -> 1
                     else -> 0
                 }
                 if (side != 0) {
-                    val urgent = t.label in vulnerable || t.ttcSeconds < 3.0f || t.area > 0.075f
-                    val caution = urgent || t.area > 0.012f || t.closingRate > 0.006f
+                    val isVulnerable = t.label in vulnerable
+                    val intrudesTowardLane = if (side < 0) t.box.right > 0.36f else t.box.left < 0.64f
+                    val nearEnough = t.area > if (isVulnerable) 0.006f else 0.018f
+                    val closingEnough = t.closingRate > if (isVulnerable) 0.0025f else 0.0045f
+                    val urgent = when {
+                        isVulnerable -> nearEnough && (t.ttcSeconds < 3.6f || t.area > 0.025f || closingEnough)
+                        else -> intrudesTowardLane && (t.ttcSeconds < 3.0f || t.area > 0.060f || closingEnough)
+                    }
+                    val caution = when {
+                        isVulnerable -> nearEnough || closingEnough
+                        else -> intrudesTowardLane && (nearEnough || closingEnough)
+                    }
                     val level = when {
                         urgent -> AlertLevel.RED
                         caution -> AlertLevel.YELLOW
                         else -> AlertLevel.NONE
                     }
-                    if (side < 0 && level.ordinal > left.ordinal) left = level
-                    if (side > 0 && level.ordinal > right.ordinal) right = level
+                    if (side < 0 && level.ordinal > left.ordinal) {
+                        left = level
+                        leftTargetId = if (level == AlertLevel.NONE) null else t.id
+                    }
+                    if (side > 0 && level.ordinal > right.ordinal) {
+                        right = level
+                        rightTargetId = if (level == AlertLevel.NONE) null else t.id
+                    }
                 }
             }
         }
@@ -208,7 +244,10 @@ class RiskEngine {
             front = front,
             frontText = frontText,
             parkingMode = parking,
-            speedKmh = speedKmh
+            speedKmh = speedKmh,
+            leftTargetId = leftTargetId,
+            rightTargetId = rightTargetId,
+            frontTargetId = frontTargetId
         )
     }
 }
