@@ -138,10 +138,6 @@ class OverlayView(context: Context) : View(context) {
         val carH = carW * 1.92f
         val car = RectF(cx - carW / 2f, cy - carH / 2f, cx + carW / 2f, cy + carH / 2f)
 
-        paint.style = Paint.Style.FILL
-        paint.color = Color.argb(44, 248, 249, 250)
-        canvas.drawRoundRect(cx - 88f * d, cy - 126f * d, cx + 88f * d, cy + 126f * d, 27f * d, 27f * d, paint)
-
         paint.shader = LinearGradient(
             car.left, car.top, car.right, car.top,
             intArrayOf(Color.rgb(218, 224, 230), Color.WHITE, Color.rgb(208, 216, 222)),
