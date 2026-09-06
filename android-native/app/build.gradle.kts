@@ -13,8 +13,8 @@ android {
         applicationId = "com.anticolision360.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 620
-        versionName = "6.2.0-native"
+        versionCode = 700
+        versionName = "core-1.0-native"
     }
 
     buildTypes {
@@ -45,17 +45,28 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite-task-vision:0.4.4")
 }
 
-val detectorModel = layout.projectDirectory.file("src/main/assets/efficientdet_lite0.tflite").asFile
+val detectorModel =
+    layout.projectDirectory.file("src/main/assets/efficientdet_lite0.tflite").asFile
 
 tasks.register("downloadDetectorModel") {
     outputs.file(detectorModel)
     doLast {
         if (!detectorModel.exists() || detectorModel.length() < 1_000_000L) {
             detectorModel.parentFile.mkdirs()
-            val url = URL("https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/object_detection/rpi/lite-model_efficientdet_lite0_detection_metadata_1.tflite")
-            url.openStream().use { input -> detectorModel.outputStream().use { output -> input.copyTo(output) } }
+            val url = URL(
+                "https://storage.googleapis.com/download.tensorflow.org/models/" +
+                    "tflite/task_library/object_detection/rpi/" +
+                    "lite-model_efficientdet_lite0_detection_metadata_1.tflite"
+            )
+            url.openStream().use { input ->
+                detectorModel.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
         }
     }
 }
 
-tasks.named("preBuild").configure { dependsOn("downloadDetectorModel") }
+tasks.named("preBuild").configure {
+    dependsOn("downloadDetectorModel")
+}

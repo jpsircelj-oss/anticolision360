@@ -10,6 +10,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -30,6 +31,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), LocationListener {
+
     private lateinit var root: FrameLayout
     private lateinit var previewView: PreviewView
     private lateinit var overlay: OverlayView
@@ -39,9 +41,13 @@ class MainActivity : AppCompatActivity(), LocationListener {
     private var detector: DetectorEngine? = null
     private val tracker = MotionTracker()
     private val riskEngine = RiskEngine()
+    private val audioEngine = AlertAudioEngine()
+
     @Volatile private var speedKmh: Float? = null
     @Volatile private var latestTracks: List<TrackedObject> = emptyList()
-    private var lastAnalysis = 0L
+
+    private var lastAnalysisAt = 0L
+    private var adaptiveIntervalMs = 72L
     private var locationManager: LocationManager? = null
 
     private val permissionLauncher = registerForActivityResult(
@@ -49,12 +55,14 @@ class MainActivity : AppCompatActivity(), LocationListener {
     ) { result ->
         if (result[Manifest.permission.CAMERA] == true) {
             startNativeSystem()
-            if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                result[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
+            if (
+                result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            ) {
                 startLocation()
             }
         } else {
-            startup.text = "AntiColisión 360 necesita permiso de cámara para funcionar."
+            startup.text = "AntiColisión 360 necesita permiso de cámara."
         }
     }
 
@@ -64,7 +72,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
         buildUi()
@@ -73,66 +82,86 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
     private fun buildUi() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.rgb(5, 8, 13)) }
+
         previewView = PreviewView(this).apply {
             implementationMode = PreviewView.ImplementationMode.PERFORMANCE
             scaleType = PreviewView.ScaleType.FILL_CENTER
             setBackgroundColor(Color.rgb(5, 8, 13))
         }
+
         overlay = OverlayView(this)
+
         startup = TextView(this).apply {
-            text = "ANTI COLISIÓN 360\nPreparando motor nativo…"
+            text = "ANTI COLISIÓN 360\nCORE 1.0 · Preparando visión"
             setTextColor(Color.WHITE)
             textSize = 18f
             gravity = Gravity.CENTER
             setBackgroundColor(Color.rgb(5, 8, 13))
-            alpha = 1f
         }
 
-        root.addView(previewView, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-        root.addView(overlay, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-        root.addView(startup, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ))
+        root.addView(
+            previewView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        root.addView(
+            overlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        root.addView(
+            startup,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
         setContentView(root)
     }
 
     private fun requestPermissionsIfNeeded() {
-        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        val locationGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+
+        val fineLocation =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
 
         if (cameraGranted) {
             startNativeSystem()
-            if (locationGranted) startLocation()
+            if (fineLocation) startLocation()
         } else {
-            permissionLauncher.launch(arrayOf(
-                Manifest.permission.CAMERA,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ))
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
         }
     }
 
     private fun startNativeSystem() {
-        startup.text = "ANTI COLISIÓN 360\nCargando IA de visión…"
+        startup.text = "ANTI COLISIÓN 360\nCORE 1.0 · Cargando IA"
+
         detectorExecutor.execute {
             try {
                 detector = DetectorEngine(applicationContext)
                 runOnUiThread {
                     bindCamera()
-                    startup.animate().alpha(0f).setDuration(420).withEndAction {
+                    startup.animate().alpha(0f).setDuration(320).withEndAction {
                         startup.visibility = android.view.View.GONE
                     }.start()
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
-                    startup.text = "No pudo iniciar la IA nativa.\n${t.message ?: t.javaClass.simpleName}"
+                    startup.text =
+                        "No pudo iniciar la IA nativa.\n${t.message ?: t.javaClass.simpleName}"
                 }
             }
         }
@@ -143,9 +172,11 @@ class MainActivity : AppCompatActivity(), LocationListener {
         future.addListener({
             try {
                 val provider = future.get()
+
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
+
                 val analysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
@@ -153,22 +184,39 @@ class MainActivity : AppCompatActivity(), LocationListener {
                     .build()
 
                 analysis.setAnalyzer(detectorExecutor) { image ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastAnalysis < 90L) {
+                    val wallNow = System.currentTimeMillis()
+                    val elapsedNow = SystemClock.elapsedRealtime()
+
+                    if (elapsedNow - lastAnalysisAt < adaptiveIntervalMs) {
                         image.close()
                         return@setAnalyzer
                     }
-                    lastAnalysis = now
+                    lastAnalysisAt = elapsedNow
+                    val started = SystemClock.elapsedRealtime()
+
                     try {
                         val raw = detector?.detect(image).orEmpty()
-                        val moving = tracker.update(raw, now)
-                        latestTracks = moving
-                        val state = riskEngine.evaluate(moving, speedKmh, now)
-                        runOnUiThread { overlay.update(moving, state, true) }
+                        val tracked = tracker.update(raw, wallNow)
+                        latestTracks = tracked
+                        val state = riskEngine.evaluate(tracked, speedKmh, wallNow)
+                        audioEngine.update(state, wallNow)
+
+                        runOnUiThread {
+                            overlay.update(tracked, state, true)
+                        }
                     } catch (_: Throwable) {
-                        val state = riskEngine.evaluate(latestTracks, speedKmh, now)
-                        runOnUiThread { overlay.update(latestTracks, state, detector != null) }
+                        val state = riskEngine.evaluate(latestTracks, speedKmh, wallNow)
+                        runOnUiThread {
+                            overlay.update(latestTracks, state, detector != null)
+                        }
                     } finally {
+                        val inferenceMs = SystemClock.elapsedRealtime() - started
+                        adaptiveIntervalMs = when {
+                            inferenceMs > 135L -> 125L
+                            inferenceMs > 100L -> 96L
+                            inferenceMs > 75L -> 78L
+                            else -> 62L
+                        }
                         image.close()
                     }
                 }
@@ -183,7 +231,8 @@ class MainActivity : AppCompatActivity(), LocationListener {
             } catch (t: Throwable) {
                 startup.visibility = android.view.View.VISIBLE
                 startup.alpha = 1f
-                startup.text = "No pudo abrir la cámara trasera.\n${t.message ?: t.javaClass.simpleName}"
+                startup.text =
+                    "No pudo abrir la cámara trasera.\n${t.message ?: t.javaClass.simpleName}"
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -209,18 +258,25 @@ class MainActivity : AppCompatActivity(), LocationListener {
                     Looper.getMainLooper()
                 )
             }
-        } catch (_: Throwable) { }
+        } catch (_: Throwable) {
+        }
     }
 
     override fun onLocationChanged(location: Location) {
-        speedKmh = if (location.hasSpeed()) (location.speed * 3.6f).coerceAtLeast(0f) else speedKmh
+        if (location.hasSpeed()) {
+            speedKmh = (location.speed * 3.6f).coerceAtLeast(0f)
+        }
     }
 
     override fun onProviderEnabled(provider: String) = Unit
     override fun onProviderDisabled(provider: String) = Unit
 
     override fun onDestroy() {
-        try { locationManager?.removeUpdates(this) } catch (_: Throwable) { }
+        try {
+            locationManager?.removeUpdates(this)
+        } catch (_: Throwable) {
+        }
+        audioEngine.release()
         detectorExecutor.shutdownNow()
         super.onDestroy()
     }
