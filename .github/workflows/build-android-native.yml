@@ -1,4 +1,4 @@
-name: Build AntiColision 360 Core 2 - corredor 2m
+name: Build AntiColision 360 Core 2 - instalacion facil
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Core 2 corridor source
+      - name: Restore Core 2 standalone source
         shell: bash
         run: |
           cat core2-build/part-*.b64 > /tmp/core2.b64
@@ -39,14 +39,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build Core 2 corridor APK
+      - name: Build standalone APK
         working-directory: android-native
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload Core 2 corridor APK
+      - name: Upload standalone APK
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-Core-2.0-Corredor-2m-APK
+          name: AntiColision360-Core-2.0-Instalacion-Facil-APK
           path: android-native/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
