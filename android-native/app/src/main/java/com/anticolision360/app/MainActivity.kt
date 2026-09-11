@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
 
     @Volatile private var speedKmh: Float? = null
     @Volatile private var latestTracks: List<TrackedObject> = emptyList()
+    @Volatile private var latestRoad: RoadGeometry = RoadGeometry.calibratedStraight()
 
     private var lastAnalysisAt = 0L
     private var adaptiveIntervalMs = 72L
@@ -92,7 +93,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         overlay = OverlayView(this)
 
         startup = TextView(this).apply {
-            text = "ANTI COLISIÓN 360\nCORE 1.0 · Preparando visión"
+            text = "ANTI COLISIÓN 360\nCORE 2.2 · Preparando visión"
             setTextColor(Color.WHITE)
             textSize = 18f
             gravity = Gravity.CENTER
@@ -147,7 +148,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     private fun startNativeSystem() {
-        startup.text = "ANTI COLISIÓN 360\nCORE 1.0 · Cargando IA"
+        startup.text = "ANTI COLISIÓN 360\nCORE 2.2 · Cargando IA"
 
         detectorExecutor.execute {
             try {
@@ -195,19 +196,20 @@ class MainActivity : AppCompatActivity(), LocationListener {
                     val started = SystemClock.elapsedRealtime()
 
                     try {
-                        val raw = detector?.detect(image).orEmpty()
-                        val tracked = tracker.update(raw, wallNow)
+                        val perception = detector?.detect(image)
+                        val tracked = tracker.update(perception?.detections.orEmpty(), wallNow)
                         latestTracks = tracked
-                        val state = riskEngine.evaluate(tracked, speedKmh, wallNow)
+                        latestRoad = perception?.road ?: latestRoad
+                        val state = riskEngine.evaluate(tracked, speedKmh, wallNow, latestRoad)
                         audioEngine.update(state, wallNow)
 
                         runOnUiThread {
-                            overlay.update(tracked, state, true)
+                            overlay.update(tracked, state, latestRoad, true)
                         }
                     } catch (_: Throwable) {
-                        val state = riskEngine.evaluate(latestTracks, speedKmh, wallNow)
+                        val state = riskEngine.evaluate(latestTracks, speedKmh, wallNow, latestRoad)
                         runOnUiThread {
-                            overlay.update(latestTracks, state, detector != null)
+                            overlay.update(latestTracks, state, latestRoad, detector != null)
                         }
                     } finally {
                         val inferenceMs = SystemClock.elapsedRealtime() - started

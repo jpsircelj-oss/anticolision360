@@ -269,7 +269,12 @@ class RiskEngine {
     private val frontLatch = ZoneLatch()
     private var lowSpeedSince = 0L
 
-    fun evaluate(tracks: List<TrackedObject>, speedKmh: Float?, now: Long): RiskState {
+    fun evaluate(
+        tracks: List<TrackedObject>,
+        speedKmh: Float?,
+        now: Long,
+        road: RoadGeometry = RoadGeometry.calibratedStraight()
+    ): RiskState {
         val speed = speedKmh ?: 0f
         val parking = if (speedKmh != null && speed <= 5f) {
             if (lowSpeedSince == 0L) lowSpeedSince = now
@@ -286,15 +291,19 @@ class RiskEngine {
         for (t in tracks) {
             if (!t.confirmed || t.label !in relevant) continue
 
-            val depth = ((t.box.bottom - 0.30f) / 0.70f).coerceIn(0f, 1f)
-            val halfCorridor = 0.095f + 0.205f * depth
-            val corridorLeft = 0.50f - halfCorridor
-            val corridorRight = 0.50f + halfCorridor
+            // The risk zones use the same adaptive two-metre geometry drawn over
+            // the pavement, so a visual boundary and an alert cannot disagree.
+            val corridor = road.corridorAt(t.box.bottom)
+            val corridorLeft = corridor.first
+            val corridorRight = corridor.second
+            val halfCorridor = (corridorRight - corridorLeft) * 0.5f
+            val corridorCenter = (corridorLeft + corridorRight) * 0.5f
 
             val overlap = max(0f, min(t.box.right, corridorRight) - max(t.box.left, corridorLeft))
             val overlapRatio = overlap / max(t.box.width(), 0.001f)
             val insideCorridor = overlapRatio > 0.34f || t.centerX in corridorLeft..corridorRight
-            val stronglyCentral = t.centerX in (0.50f - halfCorridor * 0.62f)..(0.50f + halfCorridor * 0.62f)
+            val stronglyCentral = t.centerX in
+                (corridorCenter - halfCorridor * 0.62f)..(corridorCenter + halfCorridor * 0.62f)
 
             if (insideCorridor) {
                 val c = frontRisk(t, speed, stronglyCentral)
@@ -302,8 +311,8 @@ class RiskEngine {
             }
 
             val side = when {
-                t.centerX < 0.50f -> -1
-                t.centerX > 0.50f -> 1
+                t.centerX < corridorCenter -> -1
+                t.centerX > corridorCenter -> 1
                 else -> 0
             }
             if (side != 0) {

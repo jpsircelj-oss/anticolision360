@@ -20,6 +20,11 @@ import kotlin.math.min
  */
 class DetectorEngine(context: Context) {
 
+    data class FramePerception(
+        val detections: List<RawDetection>,
+        val road: RoadGeometry
+    )
+
     private val relevant = setOf(
         "person", "bicycle", "car", "motorcycle", "bus", "truck", "skateboard",
         "dog", "cat", "horse", "sheep", "cow", "bear"
@@ -33,6 +38,7 @@ class DetectorEngine(context: Context) {
     private val vehicles = setOf("car", "truck", "bus", "motorcycle")
 
     private val detector: ObjectDetector
+    private val roadEstimator = RoadSurfaceEstimator()
 
     init {
         val baseOptions = BaseOptions.builder()
@@ -52,37 +58,44 @@ class DetectorEngine(context: Context) {
         )
     }
 
-    fun detect(image: ImageProxy): List<RawDetection> {
+    fun detect(image: ImageProxy): FramePerception {
         val bitmap = rgbaImageToBitmap(image)
         val rotated = rotate(bitmap, image.imageInfo.rotationDegrees)
-        val input = TensorImage.fromBitmap(rotated)
-        val w = rotated.width.toFloat().coerceAtLeast(1f)
-        val h = rotated.height.toFloat().coerceAtLeast(1f)
+        try {
+            val input = TensorImage.fromBitmap(rotated)
+            val w = rotated.width.toFloat().coerceAtLeast(1f)
+            val h = rotated.height.toFloat().coerceAtLeast(1f)
 
-        val filtered = detector.detect(input).mapNotNull { detection ->
-            val category = detection.categories.maxByOrNull { it.score } ?: return@mapNotNull null
-            val label = category.label.lowercase()
-            if (label !in relevant) return@mapNotNull null
+            val filtered = detector.detect(input).mapNotNull { detection ->
+                val category = detection.categories.maxByOrNull { it.score } ?: return@mapNotNull null
+                val label = category.label.lowercase()
+                if (label !in relevant) return@mapNotNull null
 
-            val minScore = when {
-                label in vulnerable -> 0.38f
-                label in vehicles -> 0.43f
-                else -> 0.46f
-            }
-            if (category.score < minScore) return@mapNotNull null
+                val minScore = when {
+                    label in vulnerable -> 0.38f
+                    label in vehicles -> 0.43f
+                    else -> 0.46f
+                }
+                if (category.score < minScore) return@mapNotNull null
 
-            val b = detection.boundingBox
-            val box = RectF(
-                (b.left / w).coerceIn(0f, 1f),
-                (b.top / h).coerceIn(0f, 1f),
-                (b.right / w).coerceIn(0f, 1f),
-                (b.bottom / h).coerceIn(0f, 1f)
-            )
-            if (!plausible(label, category.score, box)) return@mapNotNull null
-            RawDetection(label, category.score, box)
-        }.sortedByDescending { it.score }
+                val b = detection.boundingBox
+                val box = RectF(
+                    (b.left / w).coerceIn(0f, 1f),
+                    (b.top / h).coerceIn(0f, 1f),
+                    (b.right / w).coerceIn(0f, 1f),
+                    (b.bottom / h).coerceIn(0f, 1f)
+                )
+                if (!plausible(label, category.score, box)) return@mapNotNull null
+                RawDetection(label, category.score, box)
+            }.sortedByDescending { it.score }
 
-        return suppressDuplicates(filtered).take(14)
+            val detections = suppressDuplicates(filtered).take(14)
+            val road = roadEstimator.analyze(rotated, detections, System.currentTimeMillis())
+            return FramePerception(detections, road)
+        } finally {
+            if (rotated !== bitmap) rotated.recycle()
+            bitmap.recycle()
+        }
     }
 
     private fun plausible(label: String, score: Float, box: RectF): Boolean {
