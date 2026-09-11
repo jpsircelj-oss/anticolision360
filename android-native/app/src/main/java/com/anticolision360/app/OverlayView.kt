@@ -4,23 +4,31 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Core 2.1: corredor central de 2 m y alertas minimalistas por riesgo real. */
+/** Core 2.2: corredor de 2 m adaptado y estabilizado sobre el pavimento. */
 class OverlayView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var risk = RiskState()
+    private var road = RoadGeometry.calibratedStraight()
     private var engineReady = false
 
-    fun update(newTracks: List<TrackedObject>, newRisk: RiskState, ready: Boolean = true) {
+    fun update(
+        newTracks: List<TrackedObject>,
+        newRisk: RiskState,
+        newRoad: RoadGeometry,
+        ready: Boolean = true
+    ) {
         @Suppress("UNUSED_VARIABLE")
         val ignored = newTracks
         risk = newRisk
+        road = newRoad
         engineReady = ready
         postInvalidateOnAnimation()
     }
@@ -34,24 +42,38 @@ class OverlayView(context: Context) : View(context) {
     }
 
     private fun drawCorridor(canvas: Canvas) {
-        val d = resources.displayMetrics.density
-        val vanishX = width * 0.50f
-        val vanishY = height * 0.43f
-        val baseY = height * 0.965f
-        val baseHalf = width * 0.18f
+        if (!road.visible) return
+        if (risk.speedKmh != null && risk.speedKmh!! < 5f) return
 
+        val d = resources.displayMetrics.density
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
         paint.strokeWidth = 2.0f * d
-        paint.color = Color.argb(175, 255, 255, 255)
+        val alpha = (115f + road.confidence.coerceIn(0f, 1f) * 95f).toInt()
+        paint.color = Color.argb(alpha, 255, 255, 255)
         paint.setShadowLayer(5f * d, 0f, 0f, Color.argb(95, 255, 255, 255))
         setLayerType(LAYER_TYPE_SOFTWARE, paint)
 
-        canvas.drawLine(vanishX, vanishY, vanishX - baseHalf, baseY, paint)
-        canvas.drawLine(vanishX, vanishY, vanishX + baseHalf, baseY, paint)
+        canvas.drawPath(corridorPath(left = true), paint)
+        canvas.drawPath(corridorPath(left = false), paint)
 
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
+    }
+
+    private fun corridorPath(left: Boolean): Path {
+        val path = Path()
+        val samples = 24
+        for (index in 0..samples) {
+            val t = index / samples.toFloat()
+            val y = road.farY + (road.baseY - road.farY) * t
+            val bounds = road.corridorAt(y)
+            val x = if (left) bounds.first else bounds.second
+            val px = x * width
+            val py = y * height
+            if (index == 0) path.moveTo(px, py) else path.lineTo(px, py)
+        }
+        return path
     }
 
     private fun drawTopHud(canvas: Canvas) {
@@ -77,8 +99,8 @@ class OverlayView(context: Context) : View(context) {
         textPaint.color = Color.rgb(105, 115, 125)
         textPaint.textSize = 7.6f * d
         val state = when {
-            !engineReady -> "CORE 2.1 · INICIANDO"
-            else -> "CORE 2.1 · ACTIVO"
+            !engineReady -> "CORE 2.2 · INICIANDO"
+            else -> "CORE 2.2 · ACTIVO"
         }
         canvas.drawText(state, pad + 11f * d, top + 31f * d, textPaint)
 
