@@ -10,7 +10,7 @@ import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Core 2.4: corredor de 2 m apoyado en pavimento, ruedas y chasis. */
+/** Core 2.5: corredor de 2 m apoyado en pavimento, visible sólo en el sexto inferior. */
 class OverlayView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -63,10 +63,13 @@ class OverlayView(context: Context) : View(context) {
 
     private fun corridorPath(left: Boolean): Path {
         val path = Path()
-        val samples = 28
+        val samples = 18
+        // Sólo dibujamos el sexto inferior de la pantalla. La geometría de riesgo
+        // sigue calculándose hasta el horizonte en RiskEngine/RoadGeometry.
+        val visibleTopY = max(road.farY, 5f / 6f)
         for (index in 0..samples) {
             val t = index / samples.toFloat()
-            val y = road.farY + (road.baseY - road.farY) * t
+            val y = visibleTopY + (road.baseY - visibleTopY) * t
             val bounds = road.corridorAt(y)
             val x = if (left) bounds.first else bounds.second
             val px = x * width
@@ -99,8 +102,8 @@ class OverlayView(context: Context) : View(context) {
         textPaint.color = Color.rgb(105, 115, 125)
         textPaint.textSize = 7.6f * d
         val state = when {
-            !engineReady -> "CORE 2.4 · INICIANDO"
-            else -> "CORE 2.4 · ACTIVO"
+            !engineReady -> "CORE 2.5 · INICIANDO"
+            else -> "CORE 2.5 · ACTIVO"
         }
         canvas.drawText(state, pad + 11f * d, top + 31f * d, textPaint)
 

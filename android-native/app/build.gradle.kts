@@ -13,8 +13,8 @@ android {
         applicationId = "com.anticolision360.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 704
-        versionName = "core-2.4-road-contact"
+        versionCode = 705
+        versionName = "core-2.5-lower-visible-corridor"
     }
 
     buildTypes {
