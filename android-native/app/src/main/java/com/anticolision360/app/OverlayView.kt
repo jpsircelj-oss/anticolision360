@@ -10,7 +10,7 @@ import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Core 2.2: corredor de 2 m adaptado y estabilizado sobre el pavimento. */
+/** Core 2.4: corredor de 2 m apoyado en pavimento, ruedas y chasis. */
 class OverlayView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -63,7 +63,7 @@ class OverlayView(context: Context) : View(context) {
 
     private fun corridorPath(left: Boolean): Path {
         val path = Path()
-        val samples = 24
+        val samples = 28
         for (index in 0..samples) {
             val t = index / samples.toFloat()
             val y = road.farY + (road.baseY - road.farY) * t
@@ -99,8 +99,8 @@ class OverlayView(context: Context) : View(context) {
         textPaint.color = Color.rgb(105, 115, 125)
         textPaint.textSize = 7.6f * d
         val state = when {
-            !engineReady -> "CORE 2.2 · INICIANDO"
-            else -> "CORE 2.2 · ACTIVO"
+            !engineReady -> "CORE 2.4 · INICIANDO"
+            else -> "CORE 2.4 · ACTIVO"
         }
         canvas.drawText(state, pad + 11f * d, top + 31f * d, textPaint)
 
