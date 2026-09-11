@@ -93,7 +93,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         overlay = OverlayView(this)
 
         startup = TextView(this).apply {
-            text = "ANTI COLISIÓN 360\nCORE 2.2 · Preparando visión"
+            text = "ANTI COLISIÓN 360\nCORE 2.4 · Preparando visión"
             setTextColor(Color.WHITE)
             textSize = 18f
             gravity = Gravity.CENTER
@@ -148,7 +148,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     private fun startNativeSystem() {
-        startup.text = "ANTI COLISIÓN 360\nCORE 2.2 · Cargando IA"
+        startup.text = "ANTI COLISIÓN 360\nCORE 2.4 · Cargando IA"
 
         detectorExecutor.execute {
             try {
