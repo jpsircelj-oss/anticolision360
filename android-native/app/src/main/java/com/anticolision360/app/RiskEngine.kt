@@ -34,6 +34,7 @@ data class TrackedObject(
     val visualSize: Float get() = sqrt(max(area, 0.000001f))
     val aspectRatio: Float get() = box.width() / max(box.height(), 0.001f)
     val profileLike: Boolean get() = label in setOf("car", "truck", "bus") && aspectRatio >= 1.55f
+    val roadVehicle: Boolean get() = label in setOf("car", "truck", "bus", "motorcycle")
     val confirmed: Boolean
         get() = hitCount >= 4 && ageMs >= 300L && lastSeenAgeMs <= 260L && stability >= 0.48f
 
@@ -50,6 +51,7 @@ data class RiskState(
     val right: AlertLevel = AlertLevel.NONE,
     val front: AlertLevel = AlertLevel.NONE,
     val frontCritical: Boolean = false,
+    val yellowAudible: Boolean = false,
     val parkingMode: Boolean = false,
     val speedKmh: Float? = null,
     val leftTargetId: Int? = null,
@@ -239,7 +241,8 @@ class RiskEngine {
         val level: AlertLevel,
         val targetId: Int?,
         val danger: Float,
-        val critical: Boolean = false
+        val critical: Boolean = false,
+        val audible: Boolean = true
     )
 
     private class ZoneLatch {
@@ -284,15 +287,13 @@ class RiskEngine {
             false
         }
 
-        var frontCandidate = Candidate(AlertLevel.NONE, null, 0f)
-        var leftCandidate = Candidate(AlertLevel.NONE, null, 0f)
-        var rightCandidate = Candidate(AlertLevel.NONE, null, 0f)
+        var frontCandidate = Candidate(AlertLevel.NONE, null, 0f, audible = false)
+        var leftCandidate = Candidate(AlertLevel.NONE, null, 0f, audible = false)
+        var rightCandidate = Candidate(AlertLevel.NONE, null, 0f, audible = false)
 
         for (t in tracks) {
             if (!t.confirmed || t.label !in relevant) continue
 
-            // The risk zones use the same adaptive two-metre geometry drawn over
-            // the pavement, so a visual boundary and an alert cannot disagree.
             val corridor = road.corridorAt(t.box.bottom)
             val corridorLeft = corridor.first
             val corridorRight = corridor.second
@@ -310,28 +311,35 @@ class RiskEngine {
                 if (better(c, frontCandidate)) frontCandidate = c
             }
 
-            val side = when {
-                t.centerX < corridorCenter -> -1
-                t.centerX > corridorCenter -> 1
-                else -> 0
-            }
-            if (side != 0) {
-                val c = sideRisk(t, side, corridorLeft, corridorRight, insideCorridor, speed)
-                if (side < 0 && better(c, leftCandidate)) leftCandidate = c
-                if (side > 0 && better(c, rightCandidate)) rightCandidate = c
-                if (c.critical && better(c, frontCandidate)) frontCandidate = c
-            }
+            val side = if (t.centerX <= corridorCenter) -1 else 1
+            val sideCandidate = sideRisk(
+                t = t,
+                side = side,
+                corridorLeft = corridorLeft,
+                corridorRight = corridorRight,
+                insideCorridor = insideCorridor,
+                speed = speed
+            )
+            if (side < 0 && better(sideCandidate, leftCandidate)) leftCandidate = sideCandidate
+            if (side > 0 && better(sideCandidate, rightCandidate)) rightCandidate = sideCandidate
+            if (sideCandidate.critical && better(sideCandidate, frontCandidate)) frontCandidate = sideCandidate
         }
 
         val front = frontLatch.update(frontCandidate.level, now)
         val left = leftLatch.update(leftCandidate.level, now)
         val right = rightLatch.update(rightCandidate.level, now)
 
+        val yellowAudible =
+            (front == AlertLevel.YELLOW && frontCandidate.audible) ||
+                (left == AlertLevel.YELLOW && leftCandidate.audible) ||
+                (right == AlertLevel.YELLOW && rightCandidate.audible)
+
         return RiskState(
             left = left,
             right = right,
             front = front,
             frontCritical = front == AlertLevel.RED && frontCandidate.critical,
+            yellowAudible = yellowAudible,
             parkingMode = parking,
             speedKmh = speedKmh,
             leftTargetId = if (left != AlertLevel.NONE) leftCandidate.targetId else null,
@@ -344,32 +352,24 @@ class RiskEngine {
         val d = t.distanceMeters
         val relativeClosing = t.closingMps
 
-        // Exact requested near-field ladder inside the 2 m corridor.
-        if (d < 5.0f) {
-            return Candidate(AlertLevel.RED, t.id, 100f - d, critical = true)
-        }
-        if (d < 6.0f) {
-            return Candidate(AlertLevel.RED, t.id, 80f - d)
-        }
-        if (d < 8.0f) {
-            return Candidate(AlertLevel.YELLOW, t.id, 60f - d)
-        }
+        if (d < 5.0f) return Candidate(AlertLevel.RED, t.id, 100f - d, critical = true)
+        if (d < 6.0f) return Candidate(AlertLevel.RED, t.id, 80f - d)
+        if (d < 8.0f) return Candidate(AlertLevel.YELLOW, t.id, 60f - d)
 
-        // A vehicle across the corridor is considered an early hazard from about 40 m.
-        if (t.profileLike && d <= 40f) {
-            val crossingMotion = abs(t.lateralRate) > 0.012f
-            return if (crossingMotion && d <= 24f) {
-                Candidate(AlertLevel.RED, t.id, 45f - d)
-            } else {
-                Candidate(AlertLevel.YELLOW, t.id, 35f - d)
+        // A profile-like vehicle inside the two-metre corridor is treated as a possible
+        // crossing or badly positioned vehicle. Start watching well beyond 40 m.
+        if (t.profileLike && d <= 70f) {
+            val crossingMotion = abs(t.lateralRate) > 0.010f
+            return when {
+                crossingMotion && d <= 28f -> Candidate(AlertLevel.RED, t.id, 55f - d)
+                d <= 70f -> Candidate(AlertLevel.YELLOW, t.id, 42f - d * 0.20f)
+                else -> Candidate(AlertLevel.NONE, null, 0f, audible = false)
             }
         }
 
-        // Same-speed traffic at 8 m or farther remains quiet.
         val samePace = abs(relativeClosing) < 0.65f && abs(t.closingRate) < 0.0025f
-        if (samePace && d >= 8f) return Candidate(AlertLevel.NONE, null, 0f)
+        if (samePace && d >= 8f) return Candidate(AlertLevel.NONE, null, 0f, audible = false)
 
-        // Dynamic risk can warn farther away when convergence is real.
         val yellowTtc = when {
             speed >= 100f -> 5.8f
             speed >= 60f -> 5.0f
@@ -388,7 +388,7 @@ class RiskEngine {
             red -> Candidate(AlertLevel.RED, t.id, 30f - t.ttcSeconds)
             yellow -> Candidate(AlertLevel.YELLOW, t.id, 20f - t.ttcSeconds)
             t.label in vulnerable && d < 12f -> Candidate(AlertLevel.YELLOW, t.id, 15f - d)
-            else -> Candidate(AlertLevel.NONE, null, 0f)
+            else -> Candidate(AlertLevel.NONE, null, 0f, audible = false)
         }
     }
 
@@ -401,42 +401,70 @@ class RiskEngine {
         speed: Float
     ): Candidate {
         val boundary = if (side < 0) corridorLeft else corridorRight
+        val nearEdge = if (side < 0) t.box.right else t.box.left
         val touchesBoundary = if (side < 0) t.box.right >= boundary else t.box.left <= boundary
-        val towardCorridor = if (side < 0) t.lateralRate > 0.008f else t.lateralRate < -0.008f
-        val projectedCenter = t.centerX + t.lateralRate * 1.5f
-        val projectedCross = projectedCenter in corridorLeft..corridorRight
-        val boundaryGap = abs(t.centerX - boundary)
+        val towardCorridor = if (side < 0) t.lateralRate > 0.006f else t.lateralRate < -0.006f
+
+        // Project the physical edge of the detected object, not only its centre.
+        val lookAheadSeconds = when {
+            t.distanceMeters > 45f -> 2.3f
+            t.distanceMeters > 20f -> 1.8f
+            else -> 1.25f
+        }
+        val projectedNearEdge = nearEdge + t.lateralRate * lookAheadSeconds
+        val projectedCross = if (side < 0) {
+            projectedNearEdge >= corridorLeft
+        } else {
+            projectedNearEdge <= corridorRight
+        }
+
+        val boundaryGap = abs(nearEdge - boundary)
         val lateralSpeed = abs(t.lateralRate).coerceAtLeast(0.0001f)
         val lateralTtc = boundaryGap / lateralSpeed
-        val relativeMotion = abs(t.closingMps) > 0.55f || abs(t.lateralRate) > 0.008f
-        val closeEnough = t.distanceMeters <= if (speed >= 90f) 55f else 40f
+        val closeEnough = t.distanceMeters <= if (speed >= 90f) 65f else 50f
 
-        // Profile vehicle outside the corridor: yellow only unless its trajectory enters us.
-        if (!insideCorridor && t.profileLike && closeEnough && relativeMotion && !projectedCross) {
-            return Candidate(AlertLevel.YELLOW, t.id, 22f - t.distanceMeters * 0.15f)
-        }
-
-        // Vehicle parallel to us that only touches the corridor boundary: lateral flash + beep.
+        // Any mobile or stationary object actually touching a line must be reported.
         if (touchesBoundary && !towardCorridor && !projectedCross) {
-            return Candidate(AlertLevel.YELLOW, t.id, 18f - t.distanceMeters * 0.10f)
+            return Candidate(AlertLevel.YELLOW, t.id, 26f - t.distanceMeters * 0.10f, audible = true)
         }
 
-        // Real projected intrusion: red flashing. Very short lateral TTC becomes critical.
+        // A trajectory predicted to enter the two-metre area escalates according to severity.
         if (towardCorridor && projectedCross && closeEnough) {
             val critical = lateralTtc < 0.85f || (insideCorridor && t.distanceMeters < 5f)
             return Candidate(
                 AlertLevel.RED,
                 t.id,
-                45f - lateralTtc.coerceAtMost(20f) + if (critical) 30f else 0f,
-                critical = critical
+                50f - lateralTtc.coerceAtMost(20f) + if (critical) 30f else 0f,
+                critical = critical,
+                audible = true
             )
         }
 
-        if (t.label in vulnerable && closeEnough && (touchesBoundary || towardCorridor)) {
-            return Candidate(AlertLevel.YELLOW, t.id, 20f - t.distanceMeters * 0.10f)
+        // Profile vehicle outside the corridor: visible precaution only if it stays out.
+        if (!insideCorridor && t.profileLike && t.distanceMeters <= 70f && !projectedCross) {
+            return Candidate(AlertLevel.YELLOW, t.id, 21f - t.distanceMeters * 0.08f, audible = false)
         }
 
-        return Candidate(AlertLevel.NONE, null, 0f)
+        if (t.label in vulnerable && closeEnough && (touchesBoundary || towardCorridor)) {
+            return Candidate(AlertLevel.YELLOW, t.id, 22f - t.distanceMeters * 0.10f, audible = true)
+        }
+
+        // Same-direction / parallel traffic that is not touching and is not projected to enter
+        // the corridor is tracked with a yellow side flash only, explicitly without sound.
+        val parallelSameDirection =
+            t.roadVehicle &&
+                !insideCorridor &&
+                !touchesBoundary &&
+                !projectedCross &&
+                abs(t.lateralRate) < 0.012f &&
+                abs(t.closingMps) < 4.0f &&
+                t.distanceMeters <= 70f
+
+        if (parallelSameDirection) {
+            return Candidate(AlertLevel.YELLOW, t.id, 8f - t.distanceMeters * 0.02f, audible = false)
+        }
+
+        return Candidate(AlertLevel.NONE, null, 0f, audible = false)
     }
 
     private fun better(a: Candidate, b: Candidate): Boolean =
