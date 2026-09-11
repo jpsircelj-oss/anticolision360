@@ -1,4 +1,4 @@
-name: Build AntiColision 360 Core 2 - instalacion facil
+name: Build AntiColision 360 Core 2.1 - instalacion facil
 
 on:
   pull_request:
@@ -16,15 +16,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore Core 2 standalone source
-        shell: bash
-        run: |
-          cat core2-build/part-*.b64 > /tmp/core2.b64
-          base64 -d /tmp/core2.b64 > /tmp/core2.zip
-          rm -rf android-native AntiColision360-Core
-          unzip -q /tmp/core2.zip -d .
-          mv AntiColision360-Core android-native
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -39,14 +30,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build standalone APK
+      - name: Build current native source
         working-directory: android-native
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload standalone APK
         uses: actions/upload-artifact@v4
         with:
-          name: AntiColision360-Core-2.0-Instalacion-Facil-APK
+          name: AntiColision360-Core-2.1-Corredor-2m-APK
           path: android-native/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
