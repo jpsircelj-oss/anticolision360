@@ -3,16 +3,13 @@ package com.anticolision360.app
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Minimal driving UI: quiet in normal driving, edge-only risk alerts. */
+/** Core 2.1: corredor central de 2 m y alertas minimalistas por riesgo real. */
 class OverlayView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -30,10 +27,31 @@ class OverlayView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        drawCorridor(canvas)
         drawTopHud(canvas)
         drawSideAlerts(canvas)
         drawFrontAlert(canvas)
-        if (risk.parkingMode) drawParkingMode(canvas)
+    }
+
+    private fun drawCorridor(canvas: Canvas) {
+        val d = resources.displayMetrics.density
+        val vanishX = width * 0.50f
+        val vanishY = height * 0.43f
+        val baseY = height * 0.965f
+        val baseHalf = width * 0.18f
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = 2.0f * d
+        paint.color = Color.argb(175, 255, 255, 255)
+        paint.setShadowLayer(5f * d, 0f, 0f, Color.argb(95, 255, 255, 255))
+        setLayerType(LAYER_TYPE_SOFTWARE, paint)
+
+        canvas.drawLine(vanishX, vanishY, vanishX - baseHalf, baseY, paint)
+        canvas.drawLine(vanishX, vanishY, vanishX + baseHalf, baseY, paint)
+
+        paint.clearShadowLayer()
+        paint.style = Paint.Style.FILL
     }
 
     private fun drawTopHud(canvas: Canvas) {
@@ -59,9 +77,8 @@ class OverlayView(context: Context) : View(context) {
         textPaint.color = Color.rgb(105, 115, 125)
         textPaint.textSize = 7.6f * d
         val state = when {
-            !engineReady -> "CORE 1.0 · INICIANDO"
-            risk.parkingMode -> "CORE 1.0 · MANIOBRA"
-            else -> "CORE 1.0 · ACTIVO"
+            !engineReady -> "CORE 2.1 · INICIANDO"
+            else -> "CORE 2.1 · ACTIVO"
         }
         canvas.drawText(state, pad + 11f * d, top + 31f * d, textPaint)
 
@@ -83,8 +100,10 @@ class OverlayView(context: Context) : View(context) {
         canvas.drawCircle(width - pad - 8f * d, top + 8f * d, 2.7f * d, paint)
     }
 
+    private fun blinkOn(periodMs: Long): Boolean =
+        (System.currentTimeMillis() / periodMs) % 2L == 0L
+
     private fun drawSideAlerts(canvas: Canvas) {
-        if ((risk.speedKmh ?: 0f) <= 30f) return
         val d = resources.displayMetrics.density
         drawEdge(canvas, true, risk.left, d)
         drawEdge(canvas, false, risk.right, d)
@@ -92,17 +111,19 @@ class OverlayView(context: Context) : View(context) {
 
     private fun drawEdge(canvas: Canvas, left: Boolean, level: AlertLevel, d: Float) {
         if (level == AlertLevel.NONE) return
+        if (!blinkOn(if (level == AlertLevel.RED) 210L else 360L)) return
+
         val color = levelColor(level)
         val x = if (left) 7f * d else width - 7f * d
-        val y1 = height * 0.22f
-        val y2 = height * 0.78f
+        val y1 = height * 0.18f
+        val y2 = height * 0.82f
 
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
-        paint.strokeWidth = if (level == AlertLevel.RED) 5.0f * d else 3.8f * d
+        paint.strokeWidth = if (level == AlertLevel.RED) 6.0f * d else 4.0f * d
         paint.color = color
-        paint.setShadowLayer(if (level == AlertLevel.RED) 13f * d else 8f * d, 0f, 0f,
-            Color.argb(145, Color.red(color), Color.green(color), Color.blue(color)))
+        paint.setShadowLayer(if (level == AlertLevel.RED) 15f * d else 9f * d, 0f, 0f,
+            Color.argb(160, Color.red(color), Color.green(color), Color.blue(color)))
         setLayerType(LAYER_TYPE_SOFTWARE, paint)
         canvas.drawLine(x, y1, x, y2, paint)
         paint.clearShadowLayer()
@@ -111,54 +132,25 @@ class OverlayView(context: Context) : View(context) {
 
     private fun drawFrontAlert(canvas: Canvas) {
         if (risk.front == AlertLevel.NONE) return
+        if (risk.front == AlertLevel.RED && !risk.frontCritical && !blinkOn(210L)) return
+        if (risk.front == AlertLevel.YELLOW && !blinkOn(360L)) return
+
         val d = resources.displayMetrics.density
         val color = levelColor(risk.front)
         val y = height - 13f * d
 
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
-        paint.strokeWidth = if (risk.front == AlertLevel.RED) 5.2f * d else 3.9f * d
+        paint.strokeWidth = if (risk.frontCritical) 7.0f * d else if (risk.front == AlertLevel.RED) 5.8f * d else 4.0f * d
         paint.color = color
-        paint.setShadowLayer(if (risk.front == AlertLevel.RED) 14f * d else 9f * d, 0f, 0f,
-            Color.argb(150, Color.red(color), Color.green(color), Color.blue(color)))
+        paint.setShadowLayer(if (risk.front == AlertLevel.RED) 16f * d else 10f * d, 0f, 0f,
+            Color.argb(170, Color.red(color), Color.green(color), Color.blue(color)))
         setLayerType(LAYER_TYPE_SOFTWARE, paint)
-        canvas.drawLine(width * 0.13f, y, width * 0.87f, y, paint)
+        canvas.drawLine(width * 0.10f, y, width * 0.90f, y, paint)
         paint.clearShadowLayer()
         paint.style = Paint.Style.FILL
     }
 
     private fun levelColor(level: AlertLevel): Int =
         if (level == AlertLevel.RED) Color.rgb(245, 49, 70) else Color.rgb(245, 183, 0)
-
-    private fun drawParkingMode(canvas: Canvas) {
-        val d = resources.displayMetrics.density
-        val cx = width / 2f
-        val cy = height * 0.60f
-        val carW = min(62f * d, width * 0.115f)
-        val carH = carW * 1.92f
-        val car = RectF(cx - carW / 2f, cy - carH / 2f, cx + carW / 2f, cy + carH / 2f)
-
-        paint.shader = LinearGradient(
-            car.left, car.top, car.right, car.top,
-            intArrayOf(Color.rgb(218, 224, 230), Color.WHITE, Color.rgb(208, 216, 222)),
-            null, Shader.TileMode.CLAMP
-        )
-        canvas.drawRoundRect(car, 19f * d, 19f * d, paint)
-        paint.shader = null
-
-        val glass = RectF(car.left + 10f * d, car.top + 27f * d, car.right - 10f * d, car.bottom - 35f * d)
-        paint.color = Color.rgb(29, 37, 44)
-        canvas.drawRoundRect(glass, 11f * d, 11f * d, paint)
-
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.5f * d
-        for (i in 0..2) {
-            paint.color = Color.argb(100 - i * 22, 34, 181, 115)
-            val spread = carW * (0.76f + i * 0.34f)
-            val arcH = 39f * d + i * 14f * d
-            canvas.drawArc(RectF(cx - spread, car.top - arcH, cx + spread, car.top + arcH * 0.30f), 205f, 130f, false, paint)
-            canvas.drawArc(RectF(cx - spread, car.bottom - arcH * 0.30f, cx + spread, car.bottom + arcH), 25f, 130f, false, paint)
-        }
-        paint.style = Paint.Style.FILL
-    }
 }
