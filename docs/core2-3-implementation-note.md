@@ -1,0 +1,1 @@
+Implementation note: code changes are developed on branch core2-3-adaptive-risk and merged only after Android build succeeds.
