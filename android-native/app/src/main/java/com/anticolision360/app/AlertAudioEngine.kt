@@ -4,9 +4,9 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 
 /**
- * Core 2.1 audio policy:
- * - NONE: silent
- * - YELLOW: short precaution beep
+ * Core 2.3 audio policy:
+ * - safe parallel yellow tracking: silent
+ * - risk yellow: short precaution beep
  * - RED lateral: repeated side warning
  * - RED front: stronger repeated warning
  * - CRITICAL front: fast, strong alarm pattern
@@ -43,10 +43,11 @@ class AlertAudioEngine {
             return
         }
 
-        if (
-            state.front == AlertLevel.YELLOW ||
-            state.left == AlertLevel.YELLOW ||
-            state.right == AlertLevel.YELLOW
+        if (state.yellowAudible && (
+                state.front == AlertLevel.YELLOW ||
+                    state.left == AlertLevel.YELLOW ||
+                    state.right == AlertLevel.YELLOW
+            )
         ) {
             if (now - lastYellowAt >= 1100L) {
                 tone.startTone(ToneGenerator.TONE_PROP_BEEP, 95)
