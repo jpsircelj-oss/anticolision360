@@ -13,8 +13,8 @@ android {
         applicationId = "com.anticolision360.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 706
-        versionName = "core-2.6-profile-precaution"
+        versionCode = 707
+        versionName = "core-2.7-directional-audio-stabilization"
     }
 
     buildTypes {

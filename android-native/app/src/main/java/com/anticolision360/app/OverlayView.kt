@@ -10,7 +10,7 @@ import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Core 2.6: perfil dentro del corredor = precaución amarilla audible. */
+/** Core 2.7: sonidos direccionales y estabilización de cámara. */
 class OverlayView(context: Context) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -100,8 +100,8 @@ class OverlayView(context: Context) : View(context) {
         textPaint.color = Color.rgb(105, 115, 125)
         textPaint.textSize = 7.6f * d
         val state = when {
-            !engineReady -> "CORE 2.6 · INICIANDO"
-            else -> "CORE 2.6 · ACTIVO"
+            !engineReady -> "CORE 2.7 · INICIANDO"
+            else -> "CORE 2.7 · ACTIVO"
         }
         canvas.drawText(state, pad + 11f * d, top + 31f * d, textPaint)
 

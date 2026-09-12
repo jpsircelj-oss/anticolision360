@@ -5,9 +5,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
@@ -18,6 +21,8 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -93,7 +98,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
         overlay = OverlayView(this)
 
         startup = TextView(this).apply {
-            text = "ANTI COLISIÓN 360\nCORE 2.4 · Preparando visión"
+            text = "ANTI COLISIÓN 360\nCORE 2.7 · Preparando visión"
             setTextColor(Color.WHITE)
             textSize = 18f
             gravity = Gravity.CENTER
@@ -148,7 +153,7 @@ class MainActivity : AppCompatActivity(), LocationListener {
     }
 
     private fun startNativeSystem() {
-        startup.text = "ANTI COLISIÓN 360\nCORE 2.4 · Cargando IA"
+        startup.text = "ANTI COLISIÓN 360\nCORE 2.7 · Cargando IA"
 
         detectorExecutor.execute {
             try {
@@ -174,7 +179,9 @@ class MainActivity : AppCompatActivity(), LocationListener {
             try {
                 val provider = future.get()
 
-                val preview = Preview.Builder().build().also {
+                val previewBuilder = Preview.Builder()
+                applySupportedVideoStabilization(provider, previewBuilder)
+                val preview = previewBuilder.build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
 
@@ -237,6 +244,41 @@ class MainActivity : AppCompatActivity(), LocationListener {
                     "No pudo abrir la cámara trasera.\n${t.message ?: t.javaClass.simpleName}"
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun applySupportedVideoStabilization(
+        provider: ProcessCameraProvider,
+        previewBuilder: Preview.Builder
+    ) {
+        try {
+            val cameraInfo = CameraSelector.DEFAULT_BACK_CAMERA
+                .filter(provider.availableCameraInfos)
+                .firstOrNull() ?: return
+
+            val modes = Camera2CameraInfo.from(cameraInfo).getCameraCharacteristic(
+                CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES
+            ) ?: return
+
+            val selected = when {
+                Build.VERSION.SDK_INT >= 33 &&
+                    modes.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION) ->
+                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION
+
+                modes.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) ->
+                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
+
+                else -> null
+            } ?: return
+
+            Camera2Interop.Extender(previewBuilder).setCaptureRequestOption(
+                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                selected
+            )
+        } catch (_: Throwable) {
+            // Si el dispositivo no soporta estabilización por Camera2, mantenemos
+            // la cámara normal y dejamos actuar el suavizado temporal del tracker.
+        }
     }
 
     @SuppressLint("MissingPermission")
