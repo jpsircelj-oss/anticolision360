@@ -352,20 +352,19 @@ class RiskEngine {
         val d = t.distanceMeters
         val relativeClosing = t.closingMps
 
+        // Vehículo visto de perfil dentro del corredor: sólo precaución amarilla audible.
+        // Esta condición nunca genera línea roja inferior ni alarma fuerte.
+        if (t.profileLike) {
+            return if (d <= 70f) {
+                Candidate(AlertLevel.YELLOW, t.id, 44f - d * 0.20f, audible = true)
+            } else {
+                Candidate(AlertLevel.NONE, null, 0f, audible = false)
+            }
+        }
+
         if (d < 5.0f) return Candidate(AlertLevel.RED, t.id, 100f - d, critical = true)
         if (d < 6.0f) return Candidate(AlertLevel.RED, t.id, 80f - d)
         if (d < 8.0f) return Candidate(AlertLevel.YELLOW, t.id, 60f - d)
-
-        // A profile-like vehicle inside the two-metre corridor is treated as a possible
-        // crossing or badly positioned vehicle. Start watching well beyond 40 m.
-        if (t.profileLike && d <= 70f) {
-            val crossingMotion = abs(t.lateralRate) > 0.010f
-            return when {
-                crossingMotion && d <= 28f -> Candidate(AlertLevel.RED, t.id, 55f - d)
-                d <= 70f -> Candidate(AlertLevel.YELLOW, t.id, 42f - d * 0.20f)
-                else -> Candidate(AlertLevel.NONE, null, 0f, audible = false)
-            }
-        }
 
         val samePace = abs(relativeClosing) < 0.65f && abs(t.closingRate) < 0.0025f
         if (samePace && d >= 8f) return Candidate(AlertLevel.NONE, null, 0f, audible = false)
@@ -400,12 +399,23 @@ class RiskEngine {
         insideCorridor: Boolean,
         speed: Float
     ): Candidate {
+        // Si un auto/camión/bus se ve de perfil dentro de las líneas, mantener sólo
+        // precaución amarilla con sonido suave; nunca escalar a rojo por esta condición.
+        if (insideCorridor && t.profileLike && t.distanceMeters <= 70f) {
+            return Candidate(
+                AlertLevel.YELLOW,
+                t.id,
+                38f - t.distanceMeters * 0.15f,
+                critical = false,
+                audible = true
+            )
+        }
+
         val boundary = if (side < 0) corridorLeft else corridorRight
         val nearEdge = if (side < 0) t.box.right else t.box.left
         val touchesBoundary = if (side < 0) t.box.right >= boundary else t.box.left <= boundary
         val towardCorridor = if (side < 0) t.lateralRate > 0.006f else t.lateralRate < -0.006f
 
-        // Project the physical edge of the detected object, not only its centre.
         val lookAheadSeconds = when {
             t.distanceMeters > 45f -> 2.3f
             t.distanceMeters > 20f -> 1.8f
@@ -423,12 +433,10 @@ class RiskEngine {
         val lateralTtc = boundaryGap / lateralSpeed
         val closeEnough = t.distanceMeters <= if (speed >= 90f) 65f else 50f
 
-        // Any mobile or stationary object actually touching a line must be reported.
         if (touchesBoundary && !towardCorridor && !projectedCross) {
             return Candidate(AlertLevel.YELLOW, t.id, 26f - t.distanceMeters * 0.10f, audible = true)
         }
 
-        // A trajectory predicted to enter the two-metre area escalates according to severity.
         if (towardCorridor && projectedCross && closeEnough) {
             val critical = lateralTtc < 0.85f || (insideCorridor && t.distanceMeters < 5f)
             return Candidate(
@@ -440,7 +448,6 @@ class RiskEngine {
             )
         }
 
-        // Profile vehicle outside the corridor: visible precaution only if it stays out.
         if (!insideCorridor && t.profileLike && t.distanceMeters <= 70f && !projectedCross) {
             return Candidate(AlertLevel.YELLOW, t.id, 21f - t.distanceMeters * 0.08f, audible = false)
         }
@@ -449,8 +456,6 @@ class RiskEngine {
             return Candidate(AlertLevel.YELLOW, t.id, 22f - t.distanceMeters * 0.10f, audible = true)
         }
 
-        // Same-direction / parallel traffic that is not touching and is not projected to enter
-        // the corridor is tracked with a yellow side flash only, explicitly without sound.
         val parallelSameDirection =
             t.roadVehicle &&
                 !insideCorridor &&
